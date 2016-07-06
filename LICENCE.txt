@@ -1,8 +1,8 @@
-All inouk.edofx package content is released under:
+All IKPdb package content is released under:
 
 The MIT License (MIT)
 
-Copyright (c) 2010, 2015 <Cyril MORISSE / Twitter: @cmorisse>
+Copyright (c) 2016 <Cyril MORISSE - cmorisse@boxes3.net>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

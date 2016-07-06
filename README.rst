@@ -11,7 +11,7 @@ IKPDb have a decent feature set:
 * Basic Multithreading Support
 * Variable inspection and hot modifications
 * Conditional breakoints
-* And of cours, Step over, Step in, Step out
+* And of course, Step over, Step in, Step out
 
 You can see it in action and test it using Cloud9 (http://c9.io) using the ikpdb Cloud 9 plugin.
 
