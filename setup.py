@@ -25,8 +25,9 @@ long_description = (
 setup(
     name = name,
     version = version,
-    packages = find_packages('src'),
-    package_dir={'': 'src'},
+    #packages = find_packages('src'),
+    py_modules = ['ikpdb'],
+    #package_dir={'': 'src'},
     url='https://github.com/cmorisse/ikpdb',
     license='MIT',
     author='Cyril MORISSE',
@@ -45,6 +46,11 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
         'Natural Language :: English',
-     ],
+     ]
+#    ,entry_points={
+#        'console_scripts': [
+#            'ikpdb=ikpdb:main',
+#        ],
+#    },     
 
 )

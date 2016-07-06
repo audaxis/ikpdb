@@ -6,7 +6,13 @@ IKPdb is a python (CPython 2.7) debugger built to work with online IDE (eg. clou
 
 IKPdb supports only CPython 2.7 (for now).
 
-IKPDb have a decent feature set.
+IKPDb have a decent feature set:
+
+* Basic Multithreading Support
+* Variable inspection and hot modifications
+* Conditional breakoints
+* And of cours, Step over, Step in, Step out
+
 You can see it in action and test it using Cloud9 (http://c9.io) using the ikpdb Cloud 9 plugin.
 
 --------------------

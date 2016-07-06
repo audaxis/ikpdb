@@ -23,14 +23,17 @@ DEBUGGER_PORT = 15470
 _logger = logging.getLogger("IKPdb")
 _logger.setLevel(logging.DEBUG)
 
-_ch_logger = logging.getLogger("IKPdb-CH")
+_ch_logger = logging.getLogger("IKPdb-Conn")
 _ch_logger.setLevel(logging.INFO)
 
-_bp_logger = logging.getLogger("IKPdb-BP")
+_bp_logger = logging.getLogger("IKPdb-Break")
 _bp_logger.setLevel(logging.DEBUG)
 
-_exp_logger = logging.getLogger("IKPdb-EXP")
+_exp_logger = logging.getLogger("IKPdb-Expr")
 _exp_logger.setLevel(logging.DEBUG)
+
+_exec_logger = logging.getLogger("IKPdb-Exec")
+_exec_logger.setLevel(logging.DEBUG)
 
 # to prevent console handler to be added at each import
 # See: http://stackoverflow.com/questions/6729268/python-logging-messages-appearing-twice
@@ -42,6 +45,7 @@ if not _logger.handlers:
     _ch_logger.addHandler(console_handler)
     _bp_logger.addHandler(console_handler)
     _exp_logger.addHandler(console_handler)
+    _exec_logger.addHandler(console_handler)
 ##
 # Message Handler
 #
@@ -336,7 +340,7 @@ class IKPdb(bdb.Bdb):
         """ evaluate given expression in context of the current frame 
             or globally and return a tuple of value and type as str"""
         if disable_break:
-            _logger.error("Unsupported value (True) for disable_break ignored in evaluate()")
+            _exp_logger.error("Unsupported value (True) for disable_break ignored in evaluate()")
         
         if not global_context and self.curframe:
             global_vars = self.curframe.f_globals
@@ -363,7 +367,7 @@ class IKPdb(bdb.Bdb):
                 result_type = t.__name__
             result_value = None
             result_type = "%s: %s" % (result_type, result,)
-        _logger.debug("evaluate(%s) => value = %s:%s | %s", expression, result_value, result_type, result)
+        _exp_logger.debug("evaluate(%s) => value = %s:%s | %s", expression, result_value, result_type, result)
         return result_value, result_type
 
     def user_call(self, frame, argument_list):
@@ -545,9 +549,9 @@ class IKPdb(bdb.Bdb):
                                  condition,
                                  enabled)
 
-                r = self.set_break(args['file_name'], 
-                                   args['line_number'], 
-                                   cond=args.get('condition', None))
+                r = self.set_break(file_name, 
+                                   line_number, 
+                                   cond=condition)
                 messages = []
                 if r:
                     _logger.error("setBreakpoint error: %s", r)
@@ -557,7 +561,7 @@ class IKPdb(bdb.Bdb):
                 else:
                     bp_number = self.get_breakpoint_number(args['file_name'], args['line_number'])
                     assert bp_number, "Internal error: uncaught setBreakpoint failure"
-                    result = {'breakpointNumber': bp_number}
+                    result = {'breakpoint_number': bp_number}
                     command_exec_status = 'ok'
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
@@ -568,7 +572,7 @@ class IKPdb(bdb.Bdb):
                 #  - activate or deactivate breakpoint 
                 #  - set or remove condition
                 # set_break(filename, lineno, temporary=0, cond=None, funcname=None)
-                bp_number = args.get('breakpointNumber', None)
+                bp_number = args.get('breakpoint_number', None)
                 enabled = args.get('enabled', False)
                 condition = args.get('condition', '')
                 
@@ -621,7 +625,7 @@ class IKPdb(bdb.Bdb):
                 po_value = ctypes.cast(args['id'], ctypes.py_object).value
                 result={'properties': self.extract_object_properties(po_value) or []}
                 command_exec_status = 'ok'
-                _exp_logger("getProperties(%s) => result", args, result)
+                _exp_logger.debug("getProperties(%s) => %s", args, result)
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
                                     messages=messages)
@@ -649,11 +653,13 @@ class IKPdb(bdb.Bdb):
                                     messages=messages)
 
             elif command == 'runScript':
+                _exec_logger.debug("runScript(%s)", args)
                 remote_client.reply(obj, {'executionStatus': 'running'})
                 self._runscript(self.mainpyfile)
                 return 1 
                 
             elif command == 'resume':
+                _exec_logger.debug("resume(%s)", args)
                 remote_client.reply(obj, {'executionStatus': 'running'})
                 self.set_continue()
                 self._active_breakpoint_lock.release()
@@ -687,7 +693,6 @@ class IKPdb(bdb.Bdb):
                                         {},
                                         command_exec_status="error",
                                         messages=[result_type])
-                _exp_logger.debug("evaluate(%s) => %s:%s", args, result_type, value);
 
             else:
                 _logger.critical("Unsupported command '%s'.", command)
@@ -704,12 +709,15 @@ SIGNALS_DICT = dict((k, v) for v, k in reversed(sorted(signal.__dict__.items()))
                 if v.startswith('SIG') and not v.startswith('SIG_'))
 
 def close_connection():
-    if client_connection:
-        _logger.debug("Closing open connection...")
-        # Cf. https://docs.python.org/2/howto/sockets.html#disconnecting
-        client_connection.shutdown(socket.SHUT_RDWR)
-        client_connection.close()
-        _logger.debug("Connection closed...")
+    try:
+        if client_connection:
+            _logger.debug("Closing open connection...")
+            # Cf. https://docs.python.org/2/howto/sockets.html#disconnecting
+            client_connection.shutdown(socket.SHUT_RDWR)
+            client_connection.close()
+            _logger.debug("Connection closed...")
+    except NameError:
+        pass
     
 # On SIGINT, SIGTERM shutdown socket and close connection
 # (SIGKILL cannot be caught)
@@ -727,6 +735,7 @@ signal.signal(signal.SIGTERM, signal_handler)
 # main
 #
 def main():
+    _logger.debug("mains with sys.argv=%s", sys.argv)
     if not sys.argv[1:] or sys.argv[1] in ("--help", "-h"):
         print "usage: ikpdb.py scriptfile [arg] ..."
         sys.exit(2)
@@ -738,7 +747,7 @@ def main():
 
     del sys.argv[0]         # Hide "ikpdb.py" from argument list
 
-    # Replace pdb's dir with script's dir in front of module search path.
+    # Replace ikpdb's dir with script's dir in front of module search path.
     sys.path[0] = os.path.dirname(mainpyfile)
 
     # Note on saving/restoring sys.argv: it's a good idea when sys.argv was
