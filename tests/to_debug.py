@@ -32,7 +32,7 @@ class Worker(object):
             time.sleep(2)
 
 ga = 5
-gb ="coucou"
+gb ="hello"
 g_dict = {"Genesis": 1, "Don't Look Back": 2, 'array': [1,3,{'coucou': 3.14}]}
 a_tuple = (1,'e', 3.14, ['a', 'b'])
 
@@ -42,21 +42,21 @@ class BigBear:
         self._name = name
         
     def grumble(self):
-        print "Roaaarrrrrrr"
+        print "Grrrrr"
 
 def sub_function():
     return True
 
 def the_function(p_nb_seconds):
     a_var = 18.3
-    the_function_local_list = [1,2,3,'cyril']
+    the_function_local_list = [1, 2, 3, ('others', 'me',)]
     a_beast = BigBear()
     print "ga=%s" % ga
     
     print "Hello World"
-    print "Ceci est la ligne avec le point d'arret"
+    print "This is the ligne with a breakpoint"
     for loop_idx in range(p_nb_seconds):
-        print "hello @ %s seconds" % loop_idx
+        print "hello @ %s seconds in MainThread" % loop_idx
         time.sleep(1)
         if loop_idx == 12:
             if TEST_SET_TRACE:
@@ -67,7 +67,7 @@ def the_function(p_nb_seconds):
 
 
 def sub_raiser():
-    raise Exception("Prends ca dans ta bouille")
+    raise Exception("Take this")
 
 
 def raiser():
