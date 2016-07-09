@@ -13,11 +13,12 @@ import types
 import inspect
 import threading
 import types, ctypes
-import repr as repr_alt
 
 IKPDB_AUTO_SET_TRACE = True
 DEBUGGER_ADDRESS = 'localhost'
 DEBUGGER_PORT = 15470
+
+ikpdb = None
 
 # Configure logging
 _logger = logging.getLogger("IKPdb")
@@ -56,7 +57,7 @@ class IKPdbConnectionError(Exception):
 class IKPdbConnectionHandler():
     """ Manages a connection with a remote client. 
     IKpdb and remote client communicate with messages having this structure:
-    length={{length - as integer - of json_message_body below}}{{MAGIC_CODE}}{{message_body_as_json_dimp}}
+    length={{length - as integer - of json_message_body below}}{{MAGIC_CODE}}{{message_body_as_json_dump}}
     
     Where {{...}} must be replaced by real content.
     """
@@ -177,36 +178,51 @@ def IKPdbRepr(t):
     """returns a type reprsentation suitable for debugger gui
     :param t: a thing
     """
-    t_type = type(t)
-    if type(t) == types.InstanceType:
+    if hasattr(t, '__class__'):
         return t.__class__.__name__
-    return str(type(t))[7:-2]
+    t_type = type(t)
+    return str(t_type).split('')[1][1:-2]
         
     
 class IKPdb(bdb.Bdb):
     
-    def __init__(self, skip=None):
+    def __init__(self, skip=None, launch_working_directory=None):
         bdb.Bdb.__init__(self, skip=skip)
         self.mainpyfile = ''
         self._wait_for_mainpyfile = 0
         self._active_breakpoint_lock = threading.Lock()
         self.curframe = None
+        self.stopframe = None
+        self.botframe = None
+        self._CWD = launch_working_directory or os.getcwd()
 
     def lookup_module(self, filename):
         """Helper function for break/clear parsing -- may be overridden.
         lookup_module() translates (possibly incomplete) file or module name
         into an absolute file name.
         """
-        if os.path.isabs(filename) and  os.path.exists(filename):
+        _logger.debug("lookup_module(%s) with os.getcwd()=>%s", filename, os.getcwd())
+        if os.path.isabs(filename) and os.path.exists(filename):
             return filename
-        f = os.path.join(sys.path[0], filename)
+            
+        # Can we find file relatively to launch script
+        f = os.path.join(sys.path[0], filename)  
         if  os.path.exists(f) and self.canonic(f) == self.mainpyfile:
             return f
+            
+        # Can we find the file relatively to launch CWD (useful with buildout)
+        f = os.path.join(self._CWD, filename)  
+        if  os.path.exists(f):
+            return f
+
+        # Try as an absolute path after adding .py extension 
         root, ext = os.path.splitext(filename)
         if ext == '':
             filename = filename + '.py'
         if os.path.isabs(filename):
             return filename
+        
+        # Cand we find the file in system path
         for dirname in sys.path:
             while os.path.islink(dirname):
                 dirname = os.readlink(dirname)
@@ -243,8 +259,10 @@ class IKPdb(bdb.Bdb):
         """ returns the number of user browsable properties of an object. """
         if type(o) in (types.DictType, types.ListType, types.TupleType,):
             return len(o)
-        elif type(o) == types.InstanceType:
-            return len([o for o in dir(o) if not o.startswith('__')])
+        else:
+            count = len([o for o in dir(o) 
+                            if not o.startswith('__') and not hasattr(o, '__call__')])
+            return count
 
     def extract_object_properties(self, o):
         """ extracts all properties from an object (eg. f_locals, f_globals, 
@@ -261,23 +279,10 @@ class IKPdb(bdb.Bdb):
                     'id': id(a_var_value),
                     'name': a_var_name,
                     'type': IKPdbRepr(a_var_value),
-                    'value': repr_alt.repr(a_var_value),
+                    'value': repr(a_var_value),
                     'children_count': self.object_properties_count(a_var_value)
                 })
                 
-        elif type(o) == types.InstanceType:
-            a_var_name = None
-            a_var_value = None
-            for a_var_name in [member for member in dir(o) if not member.startswith('__')]:
-                a_var_value = getattr(o, a_var_name)
-                var_list.append({
-                    'id': id(a_var_value),
-                    'name': a_var_name,
-                    'type': IKPdbRepr(a_var_value),
-                    'value': repr_alt.repr(a_var_value),
-                    'children_count': self.object_properties_count(a_var_value)
-                })
-
         elif type(o) in (types.ListType, types.TupleType,):
             a_var_name = None
             a_var_value = None
@@ -286,19 +291,31 @@ class IKPdb(bdb.Bdb):
                     'id': id(a_var_value),
                     'name': a_var_name,
                     'type': IKPdbRepr(a_var_value),
-                    'value': repr_alt.repr(a_var_value),
+                    'value': repr(a_var_value),
                     'children_count': self.object_properties_count(a_var_value)
                 })
 
+        else:
+            a_var_name = None
+            a_var_value = None
+            for a_var_name in [member for member in dir(o) if not member.startswith('__')]:
+                a_var_value = getattr(o, a_var_name)
+                if not hasattr(a_var_value, '__call__'):
+                    var_list.append({
+                        'id': id(a_var_value),
+                        'name': a_var_name,
+                        'type': IKPdbRepr(a_var_value),
+                        'value': repr(a_var_value),
+                        'children_count': self.object_properties_count(a_var_value)
+                    })
         return var_list    
             
-
 
     def dump_frames(self, frame):
         """Dumps frames chain in a representation suitable for serialization 
            and remote (debugger) client usage.
         """
-        current_tread = threading.currentThread().name
+        current_tread = threading.currentThread()
         frames = []
         frame_browser = frame
         
@@ -310,41 +327,37 @@ class IKPdb(bdb.Bdb):
             _logger.debug("    frame.f_back = %s", frame_browser.f_back)
             _logger.debug("    self.botframe = %s", self.botframe)
             _logger.debug("    frame.f_lineno = %s", frame_browser.f_lineno)  # Warning 0 based
+            _logger.debug("    frame.f_code.co_filename = %s", frame_browser.f_code.co_filename)
             _logger.debug("    frame.f_locals = %s", ",".join([l_key for l_key in frame_browser.f_locals]))
             _logger.debug("    frame.g_globals = %s", ",".join([g_key for g_key in frame_browser.f_globals if g_key not in frame_browser.f_locals]))
 
-            # Update variables with globals then locals
-            globals_vars_list = self.extract_object_properties(frame_browser.f_globals)
+            # Update local variables (User can use watch expressions for globals)
+            locals_vars_list = self.extract_object_properties(frame_browser.f_locals)
 
-            deduplicated_locals_vars = {var_name: var_value for var_name, var_value in frame_browser.f_locals.items() 
-                                            if var_name not in frame_browser.f_globals}
-            locals_vars_list = self.extract_object_properties(deduplicated_locals_vars)
-
-            frame_name = "%s:%s" % (current_tread, frame_browser.f_code.co_name,)
-            if frame_browser.f_code.co_name != "<module>":
-                frame_name +="()"
+            frame_name = "%s(), thread='%s'" % (frame_browser.f_code.co_name, current_tread.name,)
             remote_frame = {
                 'id': id(frame_browser),
                 'name': frame_name,
                 'line_number': frame_browser.f_lineno,  # Warning 0 based
                 'file_path': frame_browser.f_code.co_filename, 
-                'thread': current_tread,
-                'f_locals': locals_vars_list + globals_vars_list
+                'thread': id(current_tread),
+                'f_locals': locals_vars_list
             }
             frames.append(remote_frame)
             frame_browser = frame_browser.f_back
         return frames        
 
 
-    def evaluate(self, expression, global_context=False, disable_break=False):
-        """ evaluate given expression in context of the current frame 
+    def evaluate(self, frame_id, expression, global_context=False, disable_break=False):
+        """ evaluate given expression in the givent frame 
             or globally and return a tuple of value and type as str"""
         if disable_break:
-            _exp_logger.error("Unsupported value (True) for disable_break ignored in evaluate()")
+            _exp_logger.warning("Unsupported value (True) for disable_break ignored in evaluate()")
         
-        if not global_context and self.curframe:
-            global_vars = self.curframe.f_globals
-            local_vars = self.curframe.f_locals
+        if frame_id and not global_context:
+            eval_frame = ctypes.cast(frame_id, ctypes.py_object).value
+            global_vars = eval_frame.f_globals
+            local_vars = eval_frame.f_locals
         else:
             global_vars = None
             local_vars = None
@@ -465,8 +478,7 @@ class IKPdb(bdb.Bdb):
                 bp.enable()
             else:
                 bp.disable()
-        
-            # manage condition
+            # manage conditional breakpoints
             if condition:
                 bp.cond = condition
             
@@ -524,7 +536,7 @@ class IKPdb(bdb.Bdb):
             args = obj['args']
         
             if command == 'getBreakpoints':
-                _bp_logger.debug("getBreakpoints()")
+                _bp_logger.debug("getBreakpoints(%s)", args)
                 breakpoint_list = self.get_all_breaks()
                 # TODO: Derive it from object list
                 result = []  
@@ -543,11 +555,12 @@ class IKPdb(bdb.Bdb):
                 condition = args.get('condition', '')
                 enabled = args.get('enabled', '')
                 _bp_logger.debug("setBreakpoint(file_name=%s, line_number=%s,"
-                                 " condition=%s, enabled=%s)",
+                                 " condition=%s, enabled=%s) with CWD=%s",
                                  file_name,
                                  line_number,
                                  condition,
-                                 enabled)
+                                 enabled,
+                                 os.getcwd())
 
                 r = self.set_break(file_name, 
                                    line_number, 
@@ -684,7 +697,8 @@ class IKPdb(bdb.Bdb):
                 return 1
 
             elif command == 'evaluate':  # <=> Pdb p command
-                value, result_type = self.evaluate(args['expression'], args['global'], disable_break=args['disableBreak'])
+                _exp_logger.debug("evaluate(%s)", args)
+                value, result_type = self.evaluate(args['frame'], args['expression'], args['global'], disable_break=args['disableBreak'])
                 if value:
                     remote_client.reply(obj,
                                         {'value': value, 'type': result_type})  # result
@@ -700,7 +714,32 @@ class IKPdb(bdb.Bdb):
 
         
 def set_trace():
-    IKPdb().set_trace(sys._getframe().f_back)
+    """ breaks on the line that invoked this function. 
+    """
+    global ikpdb
+    if not ikpdb:
+        raise Exception("IKPdb must be launched before calling ikpd.set_trace().")
+    ikpdb.set_trace(sys._getframe().f_back)
+
+def post_mortem(trace_back):
+    """ given a trace back, post_mortem() will break on it. This is useful for 
+        integration with system that manages Exceptions to allow them to 
+        set up a developer mode where Unhandled exceptions a returned to 
+        the developer.
+    """
+    global ikpdb
+    if not ikpdb:
+        raise Exception("IKPdb must be launched before calling ikpd.post_mortem().")
+    pm_traceback = trace_back
+    while pm_traceback.tb_next:
+        pm_traceback = pm_traceback.tb_next      
+    ikpdb.setup(None, pm_traceback)
+    ikpdb.user_line(pm_traceback.tb_frame)
+    _logger.info("Post mortem debugger finished.")
+
+
+
+
 
 ##
 # Signal Handler to properly close socket connection
@@ -727,15 +766,12 @@ def signal_handler(signal, frame):
     # Cf. http://tldp.org/LDP/abs/html/exitcodes.html
     sys.exit(128+signal)
     
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
-
 
 ##
 # main
 #
 def main():
-    _logger.debug("mains with sys.argv=%s", sys.argv)
+    _logger.debug("main() with sys.argv=%s, CWD='%s'", sys.argv, os.getcwd())
     if not sys.argv[1:] or sys.argv[1] in ("--help", "-h"):
         print "usage: ikpdb.py scriptfile [arg] ..."
         sys.exit(2)
@@ -744,6 +780,10 @@ def main():
     if not os.path.exists(mainpyfile):
         print 'Error:', mainpyfile, 'does not exist'
         sys.exit(1)
+
+    # sets up signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     del sys.argv[0]         # Hide "ikpdb.py" from argument list
 
@@ -771,6 +811,8 @@ def main():
     # setup remote client connection
     global remote_client
     remote_client = IKPdbConnectionHandler(client_connection)  
+    
+    global ikpdb
     ikpdb = IKPdb()
 
     # Send welcome message
