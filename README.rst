@@ -81,6 +81,37 @@ IKPdb protocol description
 
 ...
 
+Post mortem Integration with Odoo
+=====================
+
+IKPdb can be integrated with Odoo to automaticaly open the debugger on 
+the line that raised an unhandled exception.
+
+For that, you must:
+* modify parts/odoo/openerp/tools/debugger.py like that:
+
+::
+    # -*- coding: utf-8 -*-
+    # Copyright: 2014 - OpenERP S.A. <http://openerp.com>
+    import types
+
+    def post_mortem(config, info):
+        if config['debug_mode'] and isinstance(info[2], types.TracebackType):
+            try:
+                import pudb as pdb
+            except ImportError:
+                try:
+                    import ipdb as pdb
+                except ImportError:
+                    try:
+                        import ikpdb as pdb
+                    except ImportError:
+                        import pdb
+            pdb.post_mortem(info[2])
+            
+* launch odoo with the --debug command line parameter
+    
+
 Next level title
 ----------------
 

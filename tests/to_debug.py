@@ -8,7 +8,7 @@ TEST_MULTI_THREADING = False
 TEST_EXCEPTION_PROPAGATION = False
 TEST_POSTMORTEM = True
 TEST_SYS_EXIT = 0
-TEST_STEPPING = False
+TEST_STEPPING = True
 
 # Note that ikpdb.set_trace() will reset/mess breakpoints set using GUI
 TEST_SET_TRACE = False  
