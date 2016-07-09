@@ -38,7 +38,7 @@ _exec_logger.setLevel(logging.DEBUG)
 
 # to prevent console handler to be added at each import
 # See: http://stackoverflow.com/questions/6729268/python-logging-messages-appearing-twice
-if not _logger.handlers:
+if False and not _logger.handlers:
     console_handler = logging.StreamHandler()
     formatter = logging.Formatter("[%(name)s] %(asctime)s - %(levelname)s - %(message)s")  # create formatter
     console_handler.setFormatter(formatter)  # add formatter to ch
@@ -181,7 +181,7 @@ def IKPdbRepr(t):
     if hasattr(t, '__class__'):
         return t.__class__.__name__
     t_type = type(t)
-    return str(t_type).split('')[1][1:-2]
+    return str(t_type).split(' ')[1][1:-2]
         
     
 class IKPdb(bdb.Bdb):
@@ -232,9 +232,10 @@ class IKPdb(bdb.Bdb):
         return None
 
     def forget(self):
+        """resets debugging state variables."""
         self.lineno = None
         self.stack = []
-        self.curindex = 0
+        self.curindex = 0  # current stack index
         self.curframe = None
 
     def setup(self, f, t):
@@ -410,6 +411,24 @@ class IKPdb(bdb.Bdb):
         if self.stop_here(frame):
             return  # processing is done in user_line()
         # TODO: What can we do with this function in the context of gui debugging
+
+    def stop_here(self, frame):
+        """ Called by dispatch function to check wether debugger must stop at
+            this frame.
+        """
+        # (CT) stopframe may now also be None, see dispatch_call.
+        # (CT) the former test for None is therefore removed from here.
+        if self.skip and self.is_skipped_module(frame.f_globals.get('__name__')):
+            return False
+        if frame is self.stopframe:
+            if self.stoplineno == -1:
+                return False
+            return frame.f_lineno >= self.stoplineno
+            
+        if not self.stopframe:
+            return True
+        return False
+
 
     def user_line(self, frame, post_mortem=True):
         """This function is called when debugger has decided that we must
@@ -735,6 +754,7 @@ def post_mortem(trace_back):
         pm_traceback = pm_traceback.tb_next      
     ikpdb.setup(None, pm_traceback)
     ikpdb.user_line(pm_traceback.tb_frame)
+    ikpdb.forget()
     _logger.info("Post mortem debugger finished.")
 
 
