@@ -36,6 +36,10 @@ _exp_logger.setLevel(logging.DEBUG)
 _exec_logger = logging.getLogger("IKPdb-Exec")
 _exec_logger.setLevel(logging.DEBUG)
 
+_frame_logger = logging.getLogger("IKPDB-Fr")
+_frame_logger.setLevel(logging.INFO)
+
+
 # to prevent console handler to be added at each import
 # See: http://stackoverflow.com/questions/6729268/python-logging-messages-appearing-twice
 if False and not _logger.handlers:
@@ -191,10 +195,15 @@ class IKPdb(bdb.Bdb):
         self.mainpyfile = ''
         self._wait_for_mainpyfile = 0
         self._active_breakpoint_lock = threading.Lock()
+        self._active_thread_lock = threading.Lock()
         self.curframe = None
         self.stopframe = None
         self.botframe = None
         self._CWD = launch_working_directory or os.getcwd()
+        
+        # if defined, force debugger to stop only in a specific thread
+        self.stop_thread_ident = None  
+
 
     def lookup_module(self, filename):
         """Helper function for break/clear parsing -- may be overridden.
@@ -321,17 +330,18 @@ class IKPdb(bdb.Bdb):
         frame_browser = frame
         
         # Browse the frame chain as far as we can
+        _frame_logger.debug("dump_frames(), frame analysis:")
+        spacer = ""
         while hasattr(frame_browser, 'f_back') and frame_browser.f_back != self.botframe:
-            _logger.debug("Frame analysis:")
-            _logger.debug("    frame = %s", frame_browser)
-            _logger.debug("    frame.f_code = %s", frame_browser.f_code)
-            _logger.debug("    frame.f_back = %s", frame_browser.f_back)
-            _logger.debug("    self.botframe = %s", self.botframe)
-            _logger.debug("    frame.f_lineno = %s", frame_browser.f_lineno)  # Warning 0 based
-            _logger.debug("    frame.f_code.co_filename = %s", frame_browser.f_code.co_filename)
-            _logger.debug("    frame.f_locals = %s", ",".join([l_key for l_key in frame_browser.f_locals]))
-            _logger.debug("    frame.g_globals = %s", ",".join([g_key for g_key in frame_browser.f_globals if g_key not in frame_browser.f_locals]))
-
+            spacer += "="
+            _frame_logger.debug("%s>frame = %s, frame.f_code = %s, frame.f_back = %s, "
+                                "self.botframe = %s",
+                                spacer,
+                                hex(id(frame_browser)),
+                                frame_browser.f_code,
+                                hex(id(frame_browser.f_back)),
+                                hex(id(self.botframe)))
+                                
             # Update local variables (User can use watch expressions for globals)
             locals_vars_list = self.extract_object_properties(frame_browser.f_locals)
 
@@ -387,30 +397,91 @@ class IKPdb(bdb.Bdb):
     def user_call(self, frame, argument_list):
         """This method is called when there is the remote possibility
         that we ever need to stop in this function."""
-        _logger.debug("entering user_call() with:\n"
-                      "  => _wait_for_mainpyfile=%s\n"
-                      "  => threadName=%s\n"
-                      "  => frame=%s\n"
-                      "  => frame.f_code.co_filename=%s\n"
-                      "  => frame.f_lineno=%s\n"
-                      "  => self.mainpyfile=%s\n"
-                      "  => self.break_here()=%s\n"
-                      "  => self.stop_here()=%s\n",
-                      self._wait_for_mainpyfile,
-                      threading.currentThread().name,
-                      frame,
-                      frame.f_code.co_filename,
-                      frame.f_lineno,
-                      self.mainpyfile,
-                      self.break_here(frame),
-                      self.stop_here(frame))
-
+        
+        _frame_logger.debug("user_call() with _wait_for_mainpyfile=%s," 
+                            "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
+                            "self.break_here()=%s, self.stop_here()=%s\n",
+                            self._wait_for_mainpyfile,
+                            threading.currentThread().name,
+                            hex(id(frame)),
+                            frame.f_code,
+                            self.mainpyfile,
+                            self.break_here(frame),
+                            self.stop_here(frame))
+        
         if self._wait_for_mainpyfile:
             return  # processing is done in user_line()
         
         if self.stop_here(frame):
             return  # processing is done in user_line()
         # TODO: What can we do with this function in the context of gui debugging
+
+
+    def _set_stopinfo(self, stopframe, returnframe, stoplineno=0, thread_ident=None):
+        """Defines where/where debugger must stop next.
+        This method is overloaded to supprot multi-threading debugging.
+        """
+        self.stopframe = stopframe
+        self.returnframe = returnframe
+        self.quitting = False
+        # stoplineno >= 0 means: stop at line >= the stoplineno
+        # stoplineno -1 means: don't stop at all
+        self.stoplineno = stoplineno
+        self.stop_thread_ident = thread_ident  # if defined, stop only in this thread
+
+
+    def set_next(self, frame):  # aka Step Over
+        """Stop on the next line in or below the given frame. 
+           Often aka 'Step Over'
+        """
+        self._set_stopinfo(frame,
+                           None,
+                           thread_ident=None)  # now Stop in every thread
+
+    def set_step(self):
+        """Stop after one line of code. Often aka 'Step Into'.
+        This method is overloaded to support multi-threading: original 'set_step()'
+        causes the debugger to stop on next executed line whatever threads it
+        belongs to.
+        In this version, we specify that the debugger must stop only in 
+        the current thread by letting self.thread_ident.
+        self.thread_ident will be reset at 'run', 'resume', 'step over', 'step out', 'step into'
+        """
+        # Issue #13183: pdb skips frames after hitting a breakpoint and running
+        # step commands.
+        # Restore the trace function in the caller (that may not have been set
+        # for performance reasons) when returning from the current frame.
+        if self.frame_returning:
+            caller_frame = self.frame_returning.f_back
+            if caller_frame and not caller_frame.f_trace:
+                caller_frame.f_trace = self.trace_dispatch
+        self._set_stopinfo(None, None, thread_ident=threading.currentThread().ident)
+
+
+    def set_return(self, frame):
+        """Stop when returning from the given frame. Often aka Step Out"""
+        if frame.f_code.co_flags & CO_GENERATOR:
+            self._set_stopinfo(frame, 
+                               None,
+                               -1
+                               thread_ident=None)
+        else:
+            self._set_stopinfo(frame.f_back, 
+                               frame,
+                               thread_ident=None)
+    
+    def set_continue(self):
+        """ Resume: don't stop except at breakpoints or when finished
+        """
+        self._set_stopinfo(self.botframe, None, -1, 
+                           thread_ident=None)  # now break in every threads
+        if not self.breaks:
+            # no breakpoints; run without debugger overhead
+            sys.settrace(None)
+            frame = sys._getframe().f_back
+            while frame and frame is not self.botframe:
+                del frame.f_trace
+                frame = frame.f_back
 
     def stop_here(self, frame):
         """ Called by dispatch function to check wether debugger must stop at
@@ -425,7 +496,17 @@ class IKPdb(bdb.Bdb):
                 return False
             return frame.f_lineno >= self.stoplineno
             
-        if not self.stopframe:
+        if not self.stopframe:  
+            # set_step() leads us here. Let's check we are on the good thread
+            if self.stop_thread_ident:
+                if self.stop_thread_ident == threading.currentThread().ident:
+                    _bp_logger.debug("stop_here(%s) step_into in stop_thread.")
+                    # self.stop_thread_ident will be reset by resume, step out, step over
+                    return True
+                else:
+                    _bp_logger.debug("stop_here(%s) step_into NOT in stop_thread.")
+                    return False
+            _bp_logger.debug("stop_here(%s) step_into with NO stop_thread.")
             return True
         return False
 
@@ -434,23 +515,16 @@ class IKPdb(bdb.Bdb):
         """This function is called when debugger has decided that we must
         stop or break at this frame."""
         
-        _logger.debug("Entering user_line() with:\n"
-                      "  => _wait_for_mainpyfile=%s\n"
-                      "  => threadName=%s\n"
-                      "  => frame=%s\n"
-                      "  => frame.f_code.co_filename=%s\n"
-                      "  => frame.f_lineno=%s\n"
-                      "  => self.mainpyfile=%s\n"
-                      "  => self.break_here()=%s\n"
-                      "  => self.stop_here()=%s\n\n",
-                      self._wait_for_mainpyfile,
-                      threading.currentThread().name,
-                      frame,
-                      frame.f_code.co_filename,
-                      frame.f_lineno,
-                      self.mainpyfile,
-                      self.break_here(frame),
-                      self.stop_here(frame))
+        _frame_logger.debug("user_line() with_wait_for_mainpyfile=%s," 
+                           "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
+                           "self.break_here()=%s, self.stop_here()=%s\n",
+                           self._wait_for_mainpyfile,
+                           threading.currentThread().name,
+                           hex(id(frame)),
+                           frame.f_code,
+                           self.mainpyfile,
+                           self.break_here(frame),
+                           self.stop_here(frame))
                       
         # By default, Bdb will trace each call until user use the 'continue' command
         # This behaviour allow user to take control over debugging at the 
@@ -460,8 +534,9 @@ class IKPdb(bdb.Bdb):
         # So we simulate the continue command at the first debugger stop
         # which is just before before executing the string 
         # containing the exec statement defined in ::run()
-        if (self._wait_for_mainpyfile and frame.f_code.co_filename=='<string>'
-            and frame.f_lineno==1):
+        if (self._wait_for_mainpyfile 
+                and frame.f_code.co_filename=='<string>'
+                and frame.f_lineno==1):
             self._wait_for_mainpyfile = 0
             self.set_continue()  
             return
