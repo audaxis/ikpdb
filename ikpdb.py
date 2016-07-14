@@ -14,101 +14,136 @@ import inspect
 import threading
 import types, ctypes
 import argparse
+import datetime
 
 # For now ikpdb is a singleton
 ikpdb = None 
 
 ##
-# logging setup
+# logging
+# IKPdb has it's own logging system distinct from python loggin to
+# avoid collision when debugging programs that reconfigure logging
+# system wide.
 #
-_logger = logging.getLogger("IKPdb")
-_net_logger = logging.getLogger("IKPdb-Net")
-_bp_logger = logging.getLogger("IKPdb-Break")
-_exp_logger = logging.getLogger("IKPdb-Expr")
-_exec_logger = logging.getLogger("IKPdb-eXec")
-_frame_logger = logging.getLogger("IKPDB-Frame")
-
-def setup_logging(ikpdb_log_arg):
-    """activates DEBUG logging level based on the --ikpdb-log command
-       line argument.
-       IKPDB_LOG is a string composed of a serie of letters which
-       switch debug logging level on components of the debugger.
-       Here are the letters and the component they activate DEBUG logging 
-       level on:
-        - n,N: Network 
-        - b,B: Breakpoints 
-        - e,E: Expression evaluation
-        - x,X: Execution 
-        - f,F: Frame 
-        - g,G: Global debugger
-       by default logging is disabled for all components. A value in 
-       --ikpdb-log arg activates INFO level logging on all domains. 
-    """
-    # TODO: enhance speed with an expression
-    if 'N' in ikpdb_log_arg:
-        _net_logger.setLevel(logging.DEBUG)
-    else:
-        _net_logger.setLevel(logging.INFO)
-        
-    if 'B' in ikpdb_log_arg:
-        _bp_logger.setLevel(logging.DEBUG)
-    else:
-        _bp_logger.setLevel(logging.INFO)
-        
-    if 'E' in ikpdb_log_arg:
-        _exp_logger.setLevel(logging.DEBUG)
-    else:
-        _exp_logger.setLevel(logging.INFO)
-        
-    if 'X' in ikpdb_log_arg:
-        _exec_logger.setLevel(logging.DEBUG)
-    else:
-        _exec_logger.setLevel(logging.INFO)
-    
-    if 'F' in ikpdb_log_arg:
-        _frame_logger.setLevel(logging.DEBUG)
-    else:
-        _frame_logger.setLevel(logging.INFO)
-    
-    if 'G' in ikpdb_log_arg:
-        _logger.setLevel(logging.DEBUG)
-    else:
-        _logger.setLevel(logging.INFO)
-    
-    if 'C' in ikpdb_log_arg:
-        # to prevent console handler to be added at each import
-        # See: http://stackoverflow.com/questions/6729268/python-logging-messages-appearing-twice
-        if not _logger.handlers:
-            console_handler = logging.StreamHandler()
-            formatter = logging.Formatter("[%(name)s] %(asctime)s - %(levelname)s - %(message)s")  # create formatter
-            console_handler.setFormatter(formatter)  # apply formatter to console handled
-            _net_logger.addHandler(console_handler)
-            _bp_logger.addHandler(console_handler)
-            _exp_logger.addHandler(console_handler)
-            _exec_logger.addHandler(console_handler)
-            _frame_logger.addHandler(console_handler)
-            _logger.addHandler(console_handler)
-
-
-class Colors:
-    MAGENTA = '\033[95m'
-    BLUE = '\033[94m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BOLD = '\033[1m'
+# logging is organized in domains (which corresponds to loggers)
+# identified by one letter.
+# IKPdb logs on these domains:
+# letter: domain
+# - n,N: Network 
+# - b,B: Breakpoints 
+# - e,E: Expression evaluation
+# - x,X: Execution 
+# - f,F: Frame 
+# - g,G: Global debugger
+#
+# Logging support the same notion of level as python logging.
+# Logging is invoked using this syntax:
+# _logger.{{domain}}_{{level}}(*args)
+# eg: _logger.x_debug("error in %s", the_error)
+#
+class ANSIColors:
+    MAGENTA = '\033[95m'    
+    BLUE = '\033[94m'       # debug
+    GREEN = '\033[92m'      # info
+    YELLOW = '\033[93m'     # warning
+    RED = '\033[91m'        # error
+    BOLD = '\033[1m'        # critical
     UNDERLINE = '\033[4m'
     ENDC = '\033[0m'
 
-
-
-class Logger():
-    @classmethod
-    def debug(cls, message):
-        print >>sys.stderr, Colors.RED + message + Colors.ENDC 
-
-logger = Logger
+class IKPdbLoggerError(Exception):
+    pass
     
+class MetaIKPdbLogger(type):
+    def __getattr__(cls, name):
+        domain, level_name = name.split('_')
+        level = IKPdbLogger.LEVELS.get(level_name, None)
+        if domain not in IKPdbLogger.DOMAINS or not level:
+            raise IKPdbLoggerError("'%s' is not valid logging domain and level combination !" % name)
+            
+        def wrapper(*args, **kwargs):
+            return cls._log(domain, level, *args, **kwargs)
+        return wrapper
+
+class IKPdbLogger():
+    __metaclass__ = MetaIKPdbLogger
+    
+    enabled = False
+    TEMPLATES = [
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[94mNOLOG\033[0m - %s",    # nolog    0
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[94mDEBUG\033[0m - %s",    # debug    1
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[92mINFO\033[0m - %s",     # info     2
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[93mWARNING\033[0m - %s",  # warning  3
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[91mERROR\033[0m - %s",    # error    4
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[91mCRITICAL\033[0m - %s", # critical 5
+    ]
+
+    # Levels
+    CRITICAL = 50
+    ERROR = 40
+    WARNING= 30
+    INFO = 20
+    DEBUG = 10
+    NOLOG= 0
+
+    # Levels by name
+    LEVELS = {
+        "critical": 50,
+        "error": 40,
+        "warning": 30,
+        "info": 20, 
+        "debug": 10,
+        "nolog": 0,
+    }
+
+    # Domains and domain's level
+    DOMAINS = {
+        "n": 20,
+        "b": 20,
+        "e": 20,
+        "x": 20,
+        "f": 20,
+        "g": 20
+    }
+
+    @classmethod
+    def setup(cls, ikpdb_log_arg):
+        """activates DEBUG logging level based on the --ikpdb-log command
+           line argument.
+           IKPDB_LOG is a string composed of a serie of letters which
+           switch debug logging level on components of the debugger.
+           Here are the letters and the component they activate DEBUG logging 
+           level on:
+            - n,N: Network 
+            - b,B: Breakpoints 
+            - e,E: Expression evaluation
+            - x,X: Execution 
+            - f,F: Frame 
+            - g,G: Global debugger
+           by default logging is disabled for all components. A value in 
+           --ikpdb-log arg activates INFO level logging on all domains. 
+        """
+        if not ikpdb_log_arg:
+            return
+        IKPdbLogger.enabled = True
+        logging_configuration_string = ikpdb_log_arg.lower()
+        for letter in logging_configuration_string:
+            if letter in IKPdbLogger.DOMAINS:
+                IKPdbLogger.DOMAINS[letter] = 10
+
+    @classmethod
+    def _log(cls, domain, level, message, *args):
+        ts = datetime.datetime.now().strftime('%H:%M:%S,%f')
+        if level >= IKPdbLogger.DOMAINS[domain]:
+            try:
+                string = message % args
+            except:
+                string = message+"".join(map(lambda e: str(e), args))
+            print >>sys.stderr, IKPdbLogger.TEMPLATES[level/10] % (domain, ts, string,) 
+
+_logger = IKPdbLogger
+
+
 ##
 # Network connection
 #
@@ -145,10 +180,10 @@ class IKPdbConnectionHandler():
         return obj
         
     def log_sent(self, msg):
-        _net_logger.debug("Sent %s bytes >>>%s<<<", len(msg), msg)
+        _logger.n_debug("Sent %s bytes >>>%s<<<", len(msg), msg)
         
     def log_received(self, msg):
-        _net_logger.debug("Received %s bytes >>>%s<<<", len(msg), msg)
+        _logger.n_debug("Received %s bytes >>>%s<<<", len(msg), msg)
     
     def send(self, command, _id=None, result={}, command_exec_status="ok", frames=[], messages=[], warnings=[]):
         """Build a message from passed dict object and send it to debugger"""
@@ -188,11 +223,11 @@ class IKPdbConnectionHandler():
         """Waits for a message from the debugger and returns it as a dict"""
         with self._connection_lock:
             while True:
-                _net_logger.debug("Enter socket.recv(%s) with self._received_data = %s)", 
-                                  self.SOCKET_BUFFER_SIZE, 
-                                  self._received_data)
+                _logger.n_debug("Enter socket.recv(%s) with self._received_data = %s)", 
+                                self.SOCKET_BUFFER_SIZE, 
+                                self._received_data)
                 data = self._connection.recv(self.SOCKET_BUFFER_SIZE)
-                _net_logger.debug("Socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
+                _logger.n_debug("Socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
                 self._received_data += data
                     
                 # have we received a MAGIC_CODE
@@ -267,7 +302,7 @@ class IKPdb(bdb.Bdb):
         lookup_module() translates (possibly incomplete) file or module name
         into an absolute file name.
         """
-        _logger.debug("lookup_module(%s) with os.getcwd()=>%s", filename, os.getcwd())
+        _logger.g_debug("lookup_module(%s) with os.getcwd()=>%s", filename, os.getcwd())
         if os.path.isabs(filename) and os.path.exists(filename):
             return filename
             
@@ -387,17 +422,17 @@ class IKPdb(bdb.Bdb):
         frame_browser = frame
         
         # Browse the frame chain as far as we can
-        _frame_logger.debug("dump_frames(), frame analysis:")
+        _logger.f_debug("dump_frames(), frame analysis:")
         spacer = ""
         while hasattr(frame_browser, 'f_back') and frame_browser.f_back != self.botframe:
             spacer += "="
-            _frame_logger.debug("%s>frame = %s, frame.f_code = %s, frame.f_back = %s, "
-                                "self.botframe = %s",
-                                spacer,
-                                hex(id(frame_browser)),
-                                frame_browser.f_code,
-                                hex(id(frame_browser.f_back)),
-                                hex(id(self.botframe)))
+            _logger.f_debug("%s>frame = %s, frame.f_code = %s, frame.f_back = %s, "
+                            "self.botframe = %s",
+                            spacer,
+                            hex(id(frame_browser)),
+                            frame_browser.f_code,
+                            hex(id(frame_browser.f_back)),
+                            hex(id(self.botframe)))
                                 
             # Update local variables (User can use watch expressions for globals)
             locals_vars_list = self.extract_object_properties(frame_browser.f_locals)
@@ -420,7 +455,7 @@ class IKPdb(bdb.Bdb):
         """ evaluate given expression in the givent frame 
             or globally and return a tuple of value and type as str"""
         if disable_break:
-            _exp_logger.warning("Unsupported value (True) for disable_break ignored in evaluate()")
+            _logger.e_warning("Unsupported value (True) for disable_break ignored in evaluate()")
         
         if frame_id and not global_context:
             eval_frame = ctypes.cast(frame_id, ctypes.py_object).value
@@ -448,23 +483,23 @@ class IKPdb(bdb.Bdb):
                 result_type = t.__name__
             result_value = None
             result_type = "%s: %s" % (result_type, result,)
-        _exp_logger.debug("evaluate(%s) => value = %s:%s | %s", expression, result_value, result_type, result)
+        _logger.e_debug("evaluate(%s) => value = %s:%s | %s", expression, result_value, result_type, result)
         return result_value, result_type
 
     def user_call(self, frame, argument_list):
         """This method is called when there is the remote possibility
         that we ever need to stop in this function."""
         
-        _frame_logger.debug("user_call() with _wait_for_mainpyfile=%s," 
-                            "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
-                            "self.break_here()=%s, self.stop_here()=%s\n",
-                            self._wait_for_mainpyfile,
-                            threading.currentThread().name,
-                            hex(id(frame)),
-                            frame.f_code,
-                            self.mainpyfile,
-                            self.break_here(frame),
-                            self.stop_here(frame))
+        _logger.f_debug("user_call() with _wait_for_mainpyfile=%s," 
+                        "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
+                        "self.break_here()=%s, self.stop_here()=%s\n",
+                        self._wait_for_mainpyfile,
+                        threading.currentThread().name,
+                        hex(id(frame)),
+                        frame.f_code,
+                        self.mainpyfile,
+                        self.break_here(frame),
+                        self.stop_here(frame))
         
         if self._wait_for_mainpyfile:
             return  # processing is done in user_line()
@@ -555,13 +590,13 @@ class IKPdb(bdb.Bdb):
             # set_step() leads us here. Let's check we are on the good thread
             if self.stop_thread_ident:
                 if self.stop_thread_ident == threading.currentThread().ident:
-                    #_bp_logger.debug("stop_here() step_into in stop_thread => True")
+                    #_logger.b_debug("stop_here() step_into in stop_thread => True")
                     # self.stop_thread_ident will be reset by resume, step out, step over
                     return True
                 else:
-                    #_bp_logger.debug("stop_here() step_into NOT in stop_thread => False")
+                    #_logger.b_debug("stop_here() step_into NOT in stop_thread => False")
                     return False
-            #_bp_logger.debug("stop_here() step_into with NO stop_thread => True")
+            #_logger.b_debug("stop_here() step_into with NO stop_thread => True")
             return True
         return False
 
@@ -570,16 +605,16 @@ class IKPdb(bdb.Bdb):
         """This function is called when debugger has decided that we must
         stop or break at this frame."""
         
-        _frame_logger.debug("user_line() with_wait_for_mainpyfile=%s," 
-                           "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
-                           "self.break_here()=%s, self.stop_here()=%s\n",
-                           self._wait_for_mainpyfile,
-                           threading.currentThread().name,
-                           hex(id(frame)),
-                           frame.f_code,
-                           self.mainpyfile,
-                           self.break_here(frame),
-                           self.stop_here(frame))
+        _logger.f_debug("user_line() with_wait_for_mainpyfile=%s," 
+                        "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
+                        "self.break_here()=%s, self.stop_here()=%s\n",
+                         self._wait_for_mainpyfile,
+                         threading.currentThread().name,
+                         hex(id(frame)),
+                         frame.f_code,
+                         self.mainpyfile,
+                         self.break_here(frame),
+                         self.stop_here(frame))
                       
         # By default, Bdb will trace each call until user use the 'continue' command
         # This behaviour allow user to take control over debugging at the 
@@ -621,7 +656,9 @@ class IKPdb(bdb.Bdb):
         if not (0 <= bp_number < len(bdb.Breakpoint.bpbynumber)):
             return "Found no breakpoint numbered %s" % bp_number
         bp = bdb.Breakpoint.bpbynumber[bp_number]
-        _bp_logger.debug("bp #%s = %s", bp_number, bp)
+        if not bp:
+            return "Found no breakpoint numbered %s" % bp_number
+        _logger.b_debug("change_breakpoint_state() found breakpoint #%s = %s", bp_number, bp)
         if bp:
             if enabled:
                 bp.enable()
@@ -685,7 +722,7 @@ class IKPdb(bdb.Bdb):
             args = obj['args']
         
             if command == 'getBreakpoints':
-                _bp_logger.debug("getBreakpoints(%s)", args)
+                _logger.b_debug("getBreakpoints(%s)", args)
                 breakpoint_list = self.get_all_breaks()
                 # TODO: Derive it from object list
                 result = []  
@@ -703,20 +740,20 @@ class IKPdb(bdb.Bdb):
                 line_number = args['line_number']
                 condition = args.get('condition', '')
                 enabled = args.get('enabled', '')
-                _bp_logger.debug("setBreakpoint(file_name=%s, line_number=%s,"
-                                 " condition=%s, enabled=%s) with CWD=%s",
-                                 file_name,
-                                 line_number,
-                                 condition,
-                                 enabled,
-                                 os.getcwd())
+                _logger.b_debug("setBreakpoint(file_name=%s, line_number=%s,"
+                                " condition=%s, enabled=%s) with CWD=%s",
+                                file_name,
+                                line_number,
+                                condition,
+                                enabled,
+                                os.getcwd())
 
                 r = self.set_break(file_name, 
                                    line_number, 
                                    cond=condition)
                 messages = []
                 if r:
-                    _logger.error("setBreakpoint error: %s", r)
+                    _logger.g_error("setBreakpoint error: %s", r)
                     messages = [r]
                     result = {}
                     command_exec_status = 'error'
@@ -738,7 +775,7 @@ class IKPdb(bdb.Bdb):
                 enabled = args.get('enabled', False)
                 condition = args.get('condition', '')
                 
-                _bp_logger.debug("changeBreakpointState(%s)", args)
+                _logger.b_debug("changeBreakpointState(%s)", args)
                 if bp_number:
                     r = self.change_breakpoint_state(bp_number, 
                                                      enabled, condition=condition)
@@ -746,7 +783,7 @@ class IKPdb(bdb.Bdb):
                     messages = []
                     if r:
                         msg = "changeBreakpointState error: \"%s\"" % r
-                        _logger.error(msg)
+                        _logger.g_error(msg)
                         messages = [msg]
                         command_exec_status = 'error'
                     else:
@@ -754,7 +791,7 @@ class IKPdb(bdb.Bdb):
                 else:
                     result = {}
                     msg = "changeBreakpointState error: breakpointNumber parameter is required."
-                    _logger.error(msg)
+                    _logger.g_error(msg)
                     messages = [msg]
                     command_exec_status = 'error'
                 remote_client.reply(obj, result, 
@@ -768,12 +805,12 @@ class IKPdb(bdb.Bdb):
                 # filename passed as argument, return an error message. €
                 # The filename should be in canonical form, as described in the 
                 # canonic() method.
-                _bp_logger.debug("clearBreakpoint(%s)", args)
+                _logger.b_debug("clearBreakpoint(%s)", args)
                 r = self.clear_break(args['file_name'], args['line_number'])
                 result = {}
                 messages = []
                 if r:
-                    _logger.error("clearBreakpoint error: %s", r)
+                    _logger.g_error("clearBreakpoint error: %s", r)
                     messages = [r]
                     command_exec_status = 'error'
                 else:
@@ -787,13 +824,13 @@ class IKPdb(bdb.Bdb):
                 po_value = ctypes.cast(args['id'], ctypes.py_object).value
                 result={'properties': self.extract_object_properties(po_value) or []}
                 command_exec_status = 'ok'
-                _exp_logger.debug("getProperties(%s) => %s", args, result)
+                _logger.e_debug("getProperties(%s) => %s", args, result)
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
                                     messages=messages)
 
             elif command == "setVariable":
-                _exp_logger.debug("setVariable(%s)", args)
+                _logger.e_debug("setVariable(%s)", args)
                 messages = []
                 result = {}
                 sv_frame = ctypes.cast(args['frame'], ctypes.py_object).value
@@ -807,7 +844,7 @@ class IKPdb(bdb.Bdb):
                     command_exec_status = 'error'
                     msg = "setVariable error: failed to let %s to var with id: %s" % (args['id'], args['value'],)
                     messages = [msg]
-                    _logger.error(msg)
+                    _logger.e_error(msg)
                 command_exec_status = 'ok'
                 remote_client.reply(obj, 
                                     result, 
@@ -815,38 +852,41 @@ class IKPdb(bdb.Bdb):
                                     messages=messages)
 
             elif command == 'runScript':
-                _exec_logger.debug("runScript(%s)", args)
+                _logger.x_debug("runScript(%s)", args)
                 remote_client.reply(obj, {'executionStatus': 'running'})
                 self._runscript(self.mainpyfile)
                 return 1 
                 
             elif command == 'resume':
-                _exec_logger.debug("resume(%s)", args)
+                _logger.x_debug("resume(%s)", args)
                 remote_client.reply(obj, {'executionStatus': 'running'})
                 self.set_continue()
                 self._active_breakpoint_lock.release()
                 return 1
 
             elif command == 'stepOver':  # <=> Pdb n(ext)
+                _logger.x_debug("stepOver(%s)", args)
                 remote_client.reply(obj, {'executionStatus': 'running'})
                 self.set_next(self.curframe)
                 self._active_breakpoint_lock.release()
                 return 1
 
             elif command == 'stepInto':  # <=> Pdb s(tep)
+                _logger.x_debug("stepInto(%s)", args)
                 remote_client.reply(obj, {'executionStatus': 'running'})
                 self.set_step()
                 self._active_breakpoint_lock.release()
                 return 1
 
             elif command == 'stepOut':  # <=> Pdb r(eturn)
+                _logger.x_debug("stepOut(%s)", args)
                 remote_client.reply(obj, {'executionStatus': 'running'})
                 self.set_return(self.curframe)
                 self._active_breakpoint_lock.release()
                 return 1
 
             elif command == 'evaluate':  # <=> Pdb p command
-                _exp_logger.debug("evaluate(%s)", args)
+                _logger.e_debug("evaluate(%s)", args)
                 value, result_type = self.evaluate(args['frame'], args['expression'], args['global'], disable_break=args['disableBreak'])
                 if value:
                     remote_client.reply(obj,
@@ -858,7 +898,7 @@ class IKPdb(bdb.Bdb):
                                         messages=[result_type])
 
             else:
-                _logger.critical("Unsupported command '%s'.", command)
+                _logger.g_critical("Unsupported command '%s'.", command)
                 return
 
         
@@ -885,7 +925,7 @@ def post_mortem(trace_back):
     ikpdb.setup(None, pm_traceback)
     ikpdb.user_line(pm_traceback.tb_frame)
     ikpdb.forget()
-    _logger.info("Post mortem debugger finished.")
+    _logger.g_info("Post mortem debugger finished.")
 
 
 
@@ -900,11 +940,11 @@ SIGNALS_DICT = dict((k, v) for v, k in reversed(sorted(signal.__dict__.items()))
 def close_connection():
     try:
         if client_connection:
-            _logger.debug("Closing open connection...")
+            _logger.g_debug("Closing open connection...")
             # Cf. https://docs.python.org/2/howto/sockets.html#disconnecting
             client_connection.shutdown(socket.SHUT_RDWR)
             client_connection.close()
-            _logger.debug("Connection closed...")
+            _logger.g_debug("Connection closed...")
     except NameError:
         pass
     
@@ -943,14 +983,14 @@ def main():
                         nargs=argparse.REMAINDER)
     cmd_line_args = parser.parse_args()
     
-    setup_logging(cmd_line_args.IKPDB_LOG)
-    
+    _logger.setup(cmd_line_args.IKPDB_LOG)
+
     # We modify sys.argv to reflect command line of
     # debugged script with all IKPdb args removed
     sys.argv = cmd_line_args.script_command_args
 
-    _logger.debug("launched with cmd_line_args=%s, CWD='%s'", cmd_line_args, os.getcwd())
-    _logger.info("starts debugging: '%s'", " ".join(sys.argv))
+    _logger.g_debug("launched with cmd_line_args=%s, CWD='%s'", cmd_line_args, os.getcwd())
+    _logger.g_info("starts debugging: '%s'", " ".join(sys.argv))
     
     if not sys.argv[0:]:
         print "Error: scriptfile argument is required"
@@ -959,7 +999,7 @@ def main():
     # By using argparse.REMAINDER, sys.argv reflects command line of
     # debugged script with all IKPdb args removed
     mainpyfile =  sys.argv[0]     # Get script filename
-    _logger.debug("mainpyfile = '%s'", mainpyfile)
+    _logger.g_debug("mainpyfile = '%s'", mainpyfile)
     if not os.path.exists(mainpyfile):
         print 'Error:', mainpyfile, 'does not exist'
         sys.exit(1)
@@ -983,13 +1023,13 @@ def main():
     debug_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # http://stackoverflow.com/questions/4465959/python-errno-98-address-already-in-use?lq=1
     debug_socket.bind((cmd_line_args.IKPDB_ADDRESS, cmd_line_args.IKPDB_PORT,))
 
-    _logger.info('IKPdb listening on %s:%s', cmd_line_args.IKPDB_ADDRESS, cmd_line_args.IKPDB_PORT)
+    _logger.g_info('IKPdb listening on %s:%s', cmd_line_args.IKPDB_ADDRESS, cmd_line_args.IKPDB_PORT)
     debug_socket.listen(1)  # 1 connection max
     
     # Wait for a connection
     global client_connection
     client_connection, client_address = debug_socket.accept()
-    _logger.debug("Connected with %s:%s", client_address[0], client_address[1])  
+    _logger.g_debug("Connected with %s:%s", client_address[0], client_address[1])  
     # TODO: Redirect sdtout and stderr to a cloud9 windows ??
 
     # setup remote client connection
@@ -1012,13 +1052,13 @@ def main():
                            result={'exit_code': None, 
                                    'executionStatus': 'terminated'}, 
                            command_exec_status="ok")
-        _logger.info("Program terminated with no returned value.")  # TODO: send this to the debuger gui
+        _logger.g_info("Program terminated with no returned value.")  # TODO: send this to the debuger gui
         sys.exit(0)
 
     except SystemExit:
         # In most cases SystemExit does not warrant a post-mortem session.
         exit_code = sys.exc_info()[1].code
-        _logger.info("Program exited with exit code: %s.", exit_code)
+        _logger.g_info("Program exited with exit code: %s.", exit_code)
 
         # Connection may have been closed
         try:
@@ -1040,7 +1080,7 @@ def main():
         
     except:
         traceback.print_exc()
-        _logger.info("Uncaught exception. Entering post mortem debugging")
+        _logger.g_info("Uncaught exception. Entering post mortem debugging")
         pm_traceback = sys.exc_info()[2]
         while pm_traceback.tb_next:
             pm_traceback = pm_traceback.tb_next      
@@ -1055,7 +1095,7 @@ def main():
         except:
             pass
         
-        _logger.info("Post mortem debugger finished.")
+        _logger.g_info("Post mortem debugger finished.")
         close_connection()
         sys.exit(1)
 
