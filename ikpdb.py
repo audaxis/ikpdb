@@ -932,8 +932,6 @@ def post_mortem(trace_back, exc_info=None):
     while pm_traceback.tb_next:
         pm_traceback = pm_traceback.tb_next      
     ikpdb.setup(None, pm_traceback)
-    print pm_traceback
-    print dir(pm_traceback)
     if exc_info:
         ikpdb.user_line(pm_traceback.tb_frame, post_mortem=exc_info)
     else:
