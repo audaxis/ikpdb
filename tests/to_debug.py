@@ -3,10 +3,12 @@ import os
 import time
 import threading
 import ikpdb
+import logging
+import datetime
 
 TEST_MULTI_THREADING = False
 TEST_EXCEPTION_PROPAGATION = False
-TEST_POSTMORTEM = True
+TEST_POSTMORTEM = False
 TEST_SYS_EXIT = 0
 TEST_STEPPING = True
 
@@ -76,8 +78,137 @@ def raiser():
     except Exception as e:
         raise e
 
+import logging
+
+
+class ANSIColors:
+    MAGENTA = '\033[95m'    
+    BLUE = '\033[94m'       # debug
+    GREEN = '\033[92m'      # info
+    YELLOW = '\033[93m'     # warning
+    RED = '\033[91m'        # error
+    BOLD = '\033[1m'        # critical
+    UNDERLINE = '\033[4m'
+    ENDC = '\033[0m'
+
+class IKPdbLoggerError(Exception):
+    pass
+    
+class MetaIKPdbLogger(type):
+    def __getattr__(cls, name):
+        domain, level_name = name.split('_')
+        level = IKPdbLogger.LEVELS.get(level_name, None)
+        if domain not in IKPdbLogger.DOMAINS or not level:
+            raise IKPdbLoggerError("'%s' is not valid logging domain and level combination !" % name)
+            
+        def wrapper(*args, **kwargs):
+            return cls._log(domain, level, *args, **kwargs)
+        return wrapper
+
+class IKPdbLogger():
+    __metaclass__ = MetaIKPdbLogger
+    
+    enabled = False
+    TEMPLATES = [
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[94mNOLOG\033[0m - %s",    # nolog    0
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[94mDEBUG\033[0m - %s",    # debug    1
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[92mINFO\033[0m - %s",     # info     2
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[93mWARNING\033[0m - %s",  # warning  3
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[91mERROR\033[0m - %s",    # error    4
+        "\033[1m[IKPdb-%s]\033[0m %s - \033[91mCRITICAL\033[0m - %s", # critical 5
+    ]
+
+    # Levels
+    CRITICAL = 50
+    ERROR = 40
+    WARNING= 30
+    INFO = 20
+    DEBUG = 10
+    NOLOG= 0
+
+    # Levels by name
+    LEVELS = {
+        "critical": 50,
+        "error": 40,
+        "warning": 30,
+        "info": 20, 
+        "debug": 10,
+        "nolog": 0,
+    }
+
+    # Domains and domain's level
+    DOMAINS = {
+        "n": 20,
+        "b": 20,
+        "e": 20,
+        "x": 20,
+        "f": 20,
+        "g": 20
+    }
+
+    @classmethod
+    def setup(cls, ikpdb_log_arg):
+        """activates DEBUG logging level based on the --ikpdb-log command
+           line argument.
+           IKPDB_LOG is a string composed of a serie of letters which
+           switch debug logging level on components of the debugger.
+           Here are the letters and the component they activate DEBUG logging 
+           level on:
+            - n,N: Network 
+            - b,B: Breakpoints 
+            - e,E: Expression evaluation
+            - x,X: Execution 
+            - f,F: Frame 
+            - g,G: Global debugger
+           by default logging is disabled for all components. A value in 
+           --ikpdb-log arg activates INFO level logging on all domains. 
+        """
+        if not ikpdb_log_arg:
+            return
+        IKPdbLogger.enabled = True
+        logging_configuration_string = ikpdb_log_arg.lower()
+        for letter in logging_configuration_string:
+            if letter in IKPdbLogger.DOMAINS:
+                IKPdbLogger.DOMAINS[letter] = 10
+
+    @classmethod
+    def _log(cls, domain, level, message, *args):
+        ts = datetime.datetime.now().strftime('%H:%M:%S,%f')
+        if level >= IKPdbLogger.DOMAINS[domain]:
+            try:
+                string = message % args
+            except:
+                string = message+"".join(map(lambda e: str(e), args))
+            print >>sys.stderr, IKPdbLogger.TEMPLATES[level/10] % (domain, ts, string,) 
+
+_logger = IKPdbLogger
+_logger.setup('g')
+
+
+import timeit
+
 
 if __name__=='__main__':
+
+    start = timeit.default_timer()
+    for i in range(1000):
+        logging.warning("chaine debug")
+    end = timeit.default_timer()
+        
+    
+    start2 = timeit.default_timer()
+    for i in range(1000):
+        _logger.g_critical("chaine debug")
+    end2 = timeit.default_timer()
+
+    #_logger.x_debug("arg", 3, 4)
+    _logger.x_error("chaine %s ", 3, 4)
+    #_logger.x_erreor("chaine %s ", 3, 4)
+
+    
+    print "exec time 1 =%s" % (end-start) 
+    print "exec time 2 =%s" % (end2-start2) 
+
     b = 0
     main_bear = BigBear("Cyril")
     print "Type of main_bear=%s" % type(main_bear)

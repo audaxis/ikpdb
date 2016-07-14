@@ -13,46 +13,104 @@ import types
 import inspect
 import threading
 import types, ctypes
+import argparse
 
-IKPDB_AUTO_SET_TRACE = True
-DEBUGGER_ADDRESS = 'localhost'
-DEBUGGER_PORT = 15470
+# For now ikpdb is a singleton
+ikpdb = None 
 
-ikpdb = None
-
-# Configure logging
-_logger = logging.getLogger("IKPdb")
-_logger.setLevel(logging.DEBUG)
-
-_ch_logger = logging.getLogger("IKPdb-Conn")
-_ch_logger.setLevel(logging.INFO)
-
-_bp_logger = logging.getLogger("IKPdb-Break")
-_bp_logger.setLevel(logging.DEBUG)
-
-_exp_logger = logging.getLogger("IKPdb-Expr")
-_exp_logger.setLevel(logging.DEBUG)
-
-_exec_logger = logging.getLogger("IKPdb-Exec")
-_exec_logger.setLevel(logging.DEBUG)
-
-_frame_logger = logging.getLogger("IKPDB-Fr")
-_frame_logger.setLevel(logging.INFO)
-
-
-# to prevent console handler to be added at each import
-# See: http://stackoverflow.com/questions/6729268/python-logging-messages-appearing-twice
-if False and not _logger.handlers:
-    console_handler = logging.StreamHandler()
-    formatter = logging.Formatter("[%(name)s] %(asctime)s - %(levelname)s - %(message)s")  # create formatter
-    console_handler.setFormatter(formatter)  # add formatter to ch
-    _logger.addHandler(console_handler)
-    _ch_logger.addHandler(console_handler)
-    _bp_logger.addHandler(console_handler)
-    _exp_logger.addHandler(console_handler)
-    _exec_logger.addHandler(console_handler)
 ##
-# Message Handler
+# logging setup
+#
+_logger = logging.getLogger("IKPdb")
+_net_logger = logging.getLogger("IKPdb-Net")
+_bp_logger = logging.getLogger("IKPdb-Break")
+_exp_logger = logging.getLogger("IKPdb-Expr")
+_exec_logger = logging.getLogger("IKPdb-eXec")
+_frame_logger = logging.getLogger("IKPDB-Frame")
+
+def setup_logging(ikpdb_log_arg):
+    """activates DEBUG logging level based on the --ikpdb-log command
+       line argument.
+       IKPDB_LOG is a string composed of a serie of letters which
+       switch debug logging level on components of the debugger.
+       Here are the letters and the component they activate DEBUG logging 
+       level on:
+        - n,N: Network 
+        - b,B: Breakpoints 
+        - e,E: Expression evaluation
+        - x,X: Execution 
+        - f,F: Frame 
+        - g,G: Global debugger
+       by default logging is disabled for all components. A value in 
+       --ikpdb-log arg activates INFO level logging on all domains. 
+    """
+    # TODO: enhance speed with an expression
+    if 'N' in ikpdb_log_arg:
+        _net_logger.setLevel(logging.DEBUG)
+    else:
+        _net_logger.setLevel(logging.INFO)
+        
+    if 'B' in ikpdb_log_arg:
+        _bp_logger.setLevel(logging.DEBUG)
+    else:
+        _bp_logger.setLevel(logging.INFO)
+        
+    if 'E' in ikpdb_log_arg:
+        _exp_logger.setLevel(logging.DEBUG)
+    else:
+        _exp_logger.setLevel(logging.INFO)
+        
+    if 'X' in ikpdb_log_arg:
+        _exec_logger.setLevel(logging.DEBUG)
+    else:
+        _exec_logger.setLevel(logging.INFO)
+    
+    if 'F' in ikpdb_log_arg:
+        _frame_logger.setLevel(logging.DEBUG)
+    else:
+        _frame_logger.setLevel(logging.INFO)
+    
+    if 'G' in ikpdb_log_arg:
+        _logger.setLevel(logging.DEBUG)
+    else:
+        _logger.setLevel(logging.INFO)
+    
+    if 'C' in ikpdb_log_arg:
+        # to prevent console handler to be added at each import
+        # See: http://stackoverflow.com/questions/6729268/python-logging-messages-appearing-twice
+        if not _logger.handlers:
+            console_handler = logging.StreamHandler()
+            formatter = logging.Formatter("[%(name)s] %(asctime)s - %(levelname)s - %(message)s")  # create formatter
+            console_handler.setFormatter(formatter)  # apply formatter to console handled
+            _net_logger.addHandler(console_handler)
+            _bp_logger.addHandler(console_handler)
+            _exp_logger.addHandler(console_handler)
+            _exec_logger.addHandler(console_handler)
+            _frame_logger.addHandler(console_handler)
+            _logger.addHandler(console_handler)
+
+
+class Colors:
+    MAGENTA = '\033[95m'
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    ENDC = '\033[0m'
+
+
+
+class Logger():
+    @classmethod
+    def debug(cls, message):
+        print >>sys.stderr, Colors.RED + message + Colors.ENDC 
+
+logger = Logger
+    
+##
+# Network connection
 #
 class IKPdbConnectionError(Exception):
     pass
@@ -87,10 +145,10 @@ class IKPdbConnectionHandler():
         return obj
         
     def log_sent(self, msg):
-        _ch_logger.debug("Sent %s bytes >>>%s<<<", len(msg), msg)
+        _net_logger.debug("Sent %s bytes >>>%s<<<", len(msg), msg)
         
     def log_received(self, msg):
-        _ch_logger.debug("Received %s bytes >>>%s<<<", len(msg), msg)
+        _net_logger.debug("Received %s bytes >>>%s<<<", len(msg), msg)
     
     def send(self, command, _id=None, result={}, command_exec_status="ok", frames=[], messages=[], warnings=[]):
         """Build a message from passed dict object and send it to debugger"""
@@ -129,15 +187,12 @@ class IKPdbConnectionHandler():
     def receive(self):
         """Waits for a message from the debugger and returns it as a dict"""
         with self._connection_lock:
-            # TODO: Manages message bigger than SOCKET_BUFFER_SIZE
-            # TODO: ensure we always have a command before leaving receive()
-            
             while True:
-                _ch_logger.debug("Enter socket.recv(%s) with self._received_data = %s)", 
-                                 self.SOCKET_BUFFER_SIZE, 
-                                 self._received_data)
+                _net_logger.debug("Enter socket.recv(%s) with self._received_data = %s)", 
+                                  self.SOCKET_BUFFER_SIZE, 
+                                  self._received_data)
                 data = self._connection.recv(self.SOCKET_BUFFER_SIZE)
-                _ch_logger.debug("Socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
+                _net_logger.debug("Socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
                 self._received_data += data
                     
                 # have we received a MAGIC_CODE
@@ -173,10 +228,12 @@ class IKPdbConnectionHandler():
 
 ##
 # Debugger
+#
 
 
 class IKPdbException(Exception):
     pass
+
 
 def IKPdbRepr(t):
     """returns a type reprsentation suitable for debugger gui
@@ -460,23 +517,20 @@ class IKPdb(bdb.Bdb):
 
     def set_return(self, frame):
         """Stop when returning from the given frame. Often aka Step Out"""
-        if frame.f_code.co_flags & CO_GENERATOR:
-            self._set_stopinfo(frame, 
-                               None,
-                               -1
-                               thread_ident=None)
-        else:
-            self._set_stopinfo(frame.f_back, 
-                               frame,
-                               thread_ident=None)
-    
+        self._set_stopinfo(frame.f_back, 
+                           frame,
+                           thread_ident=None)
+
     def set_continue(self):
         """ Resume: don't stop except at breakpoints or when finished
         """
-        self._set_stopinfo(self.botframe, None, -1, 
+        self._set_stopinfo(self.botframe, 
+                           None, 
+                           -1, 
                            thread_ident=None)  # now break in every threads
         if not self.breaks:
-            # no breakpoints; run without debugger overhead
+            # no breakpoints; run without debugger overhead 
+            # TODO: Remove trace function in any threads
             sys.settrace(None)
             frame = sys._getframe().f_back
             while frame and frame is not self.botframe:
@@ -491,6 +545,7 @@ class IKPdb(bdb.Bdb):
         # (CT) the former test for None is therefore removed from here.
         if self.skip and self.is_skipped_module(frame.f_globals.get('__name__')):
             return False
+            
         if frame is self.stopframe:
             if self.stoplineno == -1:
                 return False
@@ -500,13 +555,13 @@ class IKPdb(bdb.Bdb):
             # set_step() leads us here. Let's check we are on the good thread
             if self.stop_thread_ident:
                 if self.stop_thread_ident == threading.currentThread().ident:
-                    _bp_logger.debug("stop_here(%s) step_into in stop_thread.")
+                    #_bp_logger.debug("stop_here() step_into in stop_thread => True")
                     # self.stop_thread_ident will be reset by resume, step out, step over
                     return True
                 else:
-                    _bp_logger.debug("stop_here(%s) step_into NOT in stop_thread.")
+                    #_bp_logger.debug("stop_here() step_into NOT in stop_thread => False")
                     return False
-            _bp_logger.debug("stop_here(%s) step_into with NO stop_thread.")
+            #_bp_logger.debug("stop_here() step_into with NO stop_thread => True")
             return True
         return False
 
@@ -866,12 +921,45 @@ def signal_handler(signal, frame):
 # main
 #
 def main():
-    _logger.debug("main() with sys.argv=%s, CWD='%s'", sys.argv, os.getcwd())
-    if not sys.argv[1:] or sys.argv[1] in ("--help", "-h"):
-        print "usage: ikpdb.py scriptfile [arg] ..."
+
+    parser = argparse.ArgumentParser(description="IKPdb %s - Inouk Python Debugger for CPython 2.7",
+                                     epilog="(c) 2016 Cyril MORISSE")
+    parser.add_argument("-ik_a","--ikpdb-address", 
+                        default='127.0.0.1',
+                        dest="IKPDB_ADDRESS",
+                        help="Network address on which debugger runs.")
+    parser.add_argument("-ik_p","--ikpdb-port",
+                        type=int, 
+                        default=15470,
+                        dest="IKPDB_PORT",
+                        help="Network port on which debugger runs.")
+    parser.add_argument("-ik_l", "--ikpdb-log",
+                        dest="IKPDB_LOG",
+                        default='',
+                        help="Logger command string. See documentation")
+    parser.add_argument("script_command_args",
+                        metavar="scriptfile [args]",
+                        help="Debugged script followed by all his args.",
+                        nargs=argparse.REMAINDER)
+    cmd_line_args = parser.parse_args()
+    
+    setup_logging(cmd_line_args.IKPDB_LOG)
+    
+    # We modify sys.argv to reflect command line of
+    # debugged script with all IKPdb args removed
+    sys.argv = cmd_line_args.script_command_args
+
+    _logger.debug("launched with cmd_line_args=%s, CWD='%s'", cmd_line_args, os.getcwd())
+    _logger.info("starts debugging: '%s'", " ".join(sys.argv))
+    
+    if not sys.argv[0:]:
+        print "Error: scriptfile argument is required"
         sys.exit(2)
 
-    mainpyfile =  sys.argv[1]     # Get script filename
+    # By using argparse.REMAINDER, sys.argv reflects command line of
+    # debugged script with all IKPdb args removed
+    mainpyfile =  sys.argv[0]     # Get script filename
+    _logger.debug("mainpyfile = '%s'", mainpyfile)
     if not os.path.exists(mainpyfile):
         print 'Error:', mainpyfile, 'does not exist'
         sys.exit(1)
@@ -880,7 +968,8 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    del sys.argv[0]         # Hide "ikpdb.py" from argument list
+    # no longer required
+    # del sys.argv[0]         # Hide "ikpdb.py" from argument list
 
     # Replace ikpdb's dir with script's dir in front of module search path.
     sys.path[0] = os.path.dirname(mainpyfile)
@@ -892,9 +981,9 @@ def main():
     # Initialize IKPdb listen socket
     debug_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     debug_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # http://stackoverflow.com/questions/4465959/python-errno-98-address-already-in-use?lq=1
-    debug_socket.bind((DEBUGGER_ADDRESS,DEBUGGER_PORT,))
+    debug_socket.bind((cmd_line_args.IKPDB_ADDRESS, cmd_line_args.IKPDB_PORT,))
 
-    _logger.info('Listening on %s:%s', DEBUGGER_ADDRESS, DEBUGGER_PORT)
+    _logger.info('IKPdb listening on %s:%s', cmd_line_args.IKPDB_ADDRESS, cmd_line_args.IKPDB_PORT)
     debug_socket.listen(1)  # 1 connection max
     
     # Wait for a connection
