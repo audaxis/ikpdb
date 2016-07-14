@@ -8,9 +8,9 @@ import datetime
 
 TEST_MULTI_THREADING = False
 TEST_EXCEPTION_PROPAGATION = False
-TEST_POSTMORTEM = False
+TEST_POSTMORTEM = True
 TEST_SYS_EXIT = 0
-TEST_STEPPING = True
+TEST_STEPPING = False
 
 # Note that ikpdb.set_trace() will reset/mess breakpoints set using GUI
 TEST_SET_TRACE = False  
@@ -47,6 +47,7 @@ class BigBear:
         print "Grrrrr"
 
 def sub_function():
+    #print 5/0
     return True
 
 def the_function(p_nb_seconds):
@@ -60,6 +61,8 @@ def the_function(p_nb_seconds):
     for loop_idx in range(p_nb_seconds):
         print "hello @ %s seconds in MainThread" % loop_idx
         time.sleep(1)
+        if loop_idx % 3 == 0:
+            sub_function()
         if loop_idx == 12:
             if TEST_SET_TRACE:
                 ikpdb.set_trace()  # will break on next line
@@ -191,13 +194,13 @@ import timeit
 if __name__=='__main__':
 
     start = timeit.default_timer()
-    for i in range(1000):
+    for i in range(10):
         logging.warning("chaine debug")
     end = timeit.default_timer()
         
     
     start2 = timeit.default_timer()
-    for i in range(1000):
+    for i in range(10):
         _logger.g_critical("chaine debug")
     end2 = timeit.default_timer()
 
@@ -225,7 +228,7 @@ if __name__=='__main__':
         t = threading.Thread(target=w.run, args=(5,))
         t.start()
 
-    duration = 2 if TEST_STEPPING else 15
+    duration = 3 if TEST_STEPPING else 15
     the_function(duration)
 
     if TEST_MULTI_THREADING:

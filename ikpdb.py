@@ -103,6 +103,7 @@ class IKPdbLogger():
         "e": 20,
         "x": 20,
         "f": 20,
+        "p": 20,
         "g": 20
     }
 
@@ -119,6 +120,7 @@ class IKPdbLogger():
             - e,E: Expression evaluation
             - x,X: Execution 
             - f,F: Frame 
+            - p,P: Path and python path manipulation
             - g,G: Global debugger
            by default logging is disabled for all components. A value in 
            --ikpdb-log arg activates INFO level logging on all domains. 
@@ -185,7 +187,7 @@ class IKPdbConnectionHandler():
     def log_received(self, msg):
         _logger.n_debug("Received %s bytes >>>%s<<<", len(msg), msg)
     
-    def send(self, command, _id=None, result={}, command_exec_status="ok", frames=[], messages=[], warnings=[]):
+    def send(self, command, _id=None, result={}, command_exec_status="ok", frames=[], messages=[], warnings=[], exception=None):
         """Build a message from passed dict object and send it to debugger"""
         with self._connection_lock:
             msg = self.encode({
@@ -195,7 +197,8 @@ class IKPdbConnectionHandler():
                 'commandExecStatus': command_exec_status,
                 'frames': frames,
                 'messages': messages,
-                'warnings': warnings
+                'warnings': warnings,
+                'exception': exception
             })
             if self._connection:
                 send_bytes_count = self._connection.sendall(msg)
@@ -302,7 +305,7 @@ class IKPdb(bdb.Bdb):
         lookup_module() translates (possibly incomplete) file or module name
         into an absolute file name.
         """
-        _logger.g_debug("lookup_module(%s) with os.getcwd()=>%s", filename, os.getcwd())
+        _logger.p_debug("lookup_module(%s) with os.getcwd()=>%s", filename, os.getcwd())
         if os.path.isabs(filename) and os.path.exists(filename):
             return filename
             
@@ -601,7 +604,7 @@ class IKPdb(bdb.Bdb):
         return False
 
 
-    def user_line(self, frame, post_mortem=True):
+    def user_line(self, frame, post_mortem=False):
         """This function is called when debugger has decided that we must
         stop or break at this frame."""
         
@@ -634,7 +637,13 @@ class IKPdb(bdb.Bdb):
         # acquire breakpoint Lock before sending break command to Cloud9
         self._active_breakpoint_lock.acquire()
         frames = self.dump_frames(frame)
-        remote_client.send('programBreak', frames=frames)
+        exception=None
+        if post_mortem:
+            exception = {
+                'type': IKPdbRepr(post_mortem[1]),
+                'info': post_mortem[1].message,
+            }
+        remote_client.send('programBreak', frames=frames, exception=exception)
         self.setup(frame, None)  # Reconfigure frame, stack and locals
         self.command_loop(post_mortem=post_mortem)
         
@@ -910,7 +919,7 @@ def set_trace():
         raise Exception("IKPdb must be launched before calling ikpd.set_trace().")
     ikpdb.set_trace(sys._getframe().f_back)
 
-def post_mortem(trace_back):
+def post_mortem(trace_back, exc_info=None):
     """ given a trace back, post_mortem() will break on it. This is useful for 
         integration with system that manages Exceptions to allow them to 
         set up a developer mode where Unhandled exceptions a returned to 
@@ -923,7 +932,13 @@ def post_mortem(trace_back):
     while pm_traceback.tb_next:
         pm_traceback = pm_traceback.tb_next      
     ikpdb.setup(None, pm_traceback)
-    ikpdb.user_line(pm_traceback.tb_frame)
+    print pm_traceback
+    print dir(pm_traceback)
+    if exc_info:
+        ikpdb.user_line(pm_traceback.tb_frame, post_mortem=exc_info)
+    else:
+        ikpdb.user_line(pm_traceback.tb_frame)
+        
     ikpdb.forget()
     _logger.g_info("Post mortem debugger finished.")
 
@@ -989,8 +1004,8 @@ def main():
     # debugged script with all IKPdb args removed
     sys.argv = cmd_line_args.script_command_args
 
-    _logger.g_debug("launched with cmd_line_args=%s, CWD='%s'", cmd_line_args, os.getcwd())
-    _logger.g_info("starts debugging: '%s'", " ".join(sys.argv))
+    _logger.g_debug("Launched with cmd_line_args=%s, CWD='%s'", cmd_line_args, os.getcwd())
+    _logger.g_info("Starts debugging: '%s'", " ".join(sys.argv))
     
     if not sys.argv[0:]:
         print "Error: scriptfile argument is required"
@@ -1029,7 +1044,7 @@ def main():
     # Wait for a connection
     global client_connection
     client_connection, client_address = debug_socket.accept()
-    _logger.g_debug("Connected with %s:%s", client_address[0], client_address[1])  
+    _logger.g_info("Connected with %s:%s", client_address[0], client_address[1])  
     # TODO: Redirect sdtout and stderr to a cloud9 windows ??
 
     # setup remote client connection
@@ -1085,7 +1100,7 @@ def main():
         while pm_traceback.tb_next:
             pm_traceback = pm_traceback.tb_next      
         ikpdb.setup(None, pm_traceback)
-        ikpdb.user_line(pm_traceback.tb_frame)
+        ikpdb.user_line(pm_traceback.tb_frame, post_mortem=sys.exc_info())
         ikpdb.forget()
         try:
             remote_client.send('programEnd', 
