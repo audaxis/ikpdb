@@ -362,31 +362,63 @@ class IKPdb(bdb.Bdb):
 
     def object_properties_count(self, o):
         """ returns the number of user browsable properties of an object. """
+        o_type = type(o)
         if type(o) in (types.DictType, types.ListType, types.TupleType,):
             return len(o)
+        elif type(o) in (types.NoneType, types.BooleanType, types.FloatType, 
+                         types.UnicodeType, types.FloatType, types.IntType, 
+                         types.StringType, types.LongType, types.ModuleType, 
+                         types.MethodType, types.FunctionType,):
+            return 0
         else:
-            count = len([o for o in dir(o) 
-                            if not o.startswith('__') and not hasattr(o, '__call__')])
+            # Following lines are used to debug variables members browsing
+            # and counting
+            # if False and str(o_type) == "<class 'socket._socketobject'>":
+            #     print "@378"
+            #     print dir(o)
+            #     print "hasattr(o, '__dict__')=%s" % hasattr(o,'__dict__')
+            #     count = 0
+            #     if hasattr(o, '__dict__'):
+            #         for m_name, m_value in o.__dict__.iteritems():
+            #             if m_name.startswith('__'):
+            #                 print "    %s=>False" % (m_name,)
+            #                 continue
+            #             if type(m_value) in (types.ModuleType, types.MethodType, types.FunctionType,):
+            #                 print "    %s=>False" % (m_name,)
+            #                 continue
+            #             print "    %s=>True" % (m_name,)
+            #             count +=1
+            #     print "    %s => %s = %s" % (o, count, dir(o),)
+            # else:
+            if hasattr(o, '__dict__'):
+                count = len([m_name for m_name, m_value in o.__dict__.iteritems()
+                              if not m_name.startswith('__') 
+                                and not type(m_value) in (types.ModuleType, 
+                                                          types.MethodType, 
+                                                          types.FunctionType,) ])
+            else:
+                count = 0
             return count
 
     def extract_object_properties(self, o):
         """ extracts all properties from an object (eg. f_locals, f_globals, 
             user dict, instance ...) and returns them as an array of variables
         """
-        
+        _logger.e_debug("extract_object_properties(%s)", o)
         var_list = []
         if type(o) == types.DictType:
             a_var_name = None
             a_var_value = None
             for a_var_name in o:
                 a_var_value = o[a_var_name]
-                var_list.append({
+                a_var_info = {
                     'id': id(a_var_value),
                     'name': a_var_name,
                     'type': IKPdbRepr(a_var_value),
                     'value': repr(a_var_value),
                     'children_count': self.object_properties_count(a_var_value)
-                })
+                }
+                var_list.append(a_var_info)
                 
         elif type(o) in (types.ListType, types.TupleType,):
             a_var_name = None
@@ -403,16 +435,19 @@ class IKPdb(bdb.Bdb):
         else:
             a_var_name = None
             a_var_value = None
-            for a_var_name in [member for member in dir(o) if not member.startswith('__')]:
-                a_var_value = getattr(o, a_var_name)
-                if not hasattr(a_var_value, '__call__'):
-                    var_list.append({
-                        'id': id(a_var_value),
-                        'name': a_var_name,
-                        'type': IKPdbRepr(a_var_value),
-                        'value': repr(a_var_value),
-                        'children_count': self.object_properties_count(a_var_value)
-                    })
+            if hasattr(o, '__dict__'):
+                for a_var_name, a_var_value in o.__dict__.iteritems():
+                    if (not a_var_name.startswith('__') 
+                        and not type(a_var_value) in (types.ModuleType, 
+                                                      types.MethodType, 
+                                                      types.FunctionType,)):
+                        var_list.append({
+                            'id': id(a_var_value),
+                            'name': a_var_name,
+                            'type': IKPdbRepr(a_var_value),
+                            'value': repr(a_var_value),
+                            'children_count': self.object_properties_count(a_var_value)
+                        })
         return var_list    
             
 
