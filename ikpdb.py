@@ -21,7 +21,7 @@ ikpdb = None
 
 ##
 # logging
-# IKPdb has it's own logging system distinct from python loggin to
+# IKPdb has it's own logging system distinct from python logging to
 # avoid collision when debugging programs that reconfigure logging
 # system wide.
 #
@@ -299,6 +299,19 @@ class IKPdb(bdb.Bdb):
         # if defined, force debugger to stop only in a specific thread
         self.stop_thread_ident = None  
 
+    def canonic(self, filename):
+        """ returns canonical version of a file name.
+        A canonical file name is an absolute, lowercase normalized path 
+        to a given file.
+        """
+        if filename == "<" + filename[1:-1] + ">":
+            return filename
+        canonic = self.fncache.get(filename)
+        if not canonic:
+            canonic = os.path.abspath(filename)
+            canonic = os.path.normcase(canonic)
+            self.fncache[filename] = canonic
+        return canonic
 
     def lookup_module(self, filename):
         """Helper function for break/clear parsing -- may be overridden.
@@ -311,7 +324,7 @@ class IKPdb(bdb.Bdb):
             
         # Can we find file relatively to launch script
         f = os.path.join(sys.path[0], filename)  
-        if  os.path.exists(f) and self.canonic(f) == self.mainpyfile:
+        if os.path.exists(f) and self.canonic(f) == self.mainpyfile:
             return f
             
         # Can we find the file relatively to launch CWD (useful with buildout)
@@ -702,7 +715,11 @@ class IKPdb(bdb.Bdb):
         bp = bdb.Breakpoint.bpbynumber[bp_number]
         if not bp:
             return "Found no breakpoint numbered %s" % bp_number
-        _logger.b_debug("change_breakpoint_state() found breakpoint #%s = %s", bp_number, bp)
+        _logger.b_debug("change_breakpoint_state(%s, %s,condition=%s) found => %s", 
+                        bp_number,
+                        enabled,
+                        repr(condition),
+                        bp)
         if bp:
             if enabled:
                 bp.enable()
@@ -766,7 +783,7 @@ class IKPdb(bdb.Bdb):
             args = obj['args']
         
             if command == 'getBreakpoints':
-                _logger.b_debug("getBreakpoints(%s)", args)
+                _logger.b_warning("getBreakpoints(%s) is not implemented and return []", args)
                 breakpoint_list = self.get_all_breaks()
                 # TODO: Derive it from object list
                 result = []  
@@ -791,8 +808,8 @@ class IKPdb(bdb.Bdb):
                                 condition,
                                 enabled,
                                 os.getcwd())
-
-                r = self.set_break(file_name, 
+                c_file_name = self.lookup_module(file_name)
+                r = self.set_break(c_file_name, 
                                    line_number, 
                                    cond=condition)
                 messages = []
@@ -802,6 +819,9 @@ class IKPdb(bdb.Bdb):
                     result = {}
                     command_exec_status = 'error'
                 else:
+                    # get_breakpoint_number invoke lookup_module() so we don't need to do it
+                    # TODO: remove this comment when all breakpoint methods will
+                    # do the same
                     bp_number = self.get_breakpoint_number(args['file_name'], args['line_number'])
                     assert bp_number, "Internal error: uncaught setBreakpoint failure"
                     result = {'breakpoint_number': bp_number}
@@ -814,43 +834,40 @@ class IKPdb(bdb.Bdb):
                 # Allows to:
                 #  - activate or deactivate breakpoint 
                 #  - set or remove condition
-                # set_break(filename, lineno, temporary=0, cond=None, funcname=None)
-                bp_number = args.get('breakpoint_number', None)
-                enabled = args.get('enabled', False)
-                condition = args.get('condition', '')
-                
                 _logger.b_debug("changeBreakpointState(%s)", args)
+                bp_number = args.get('breakpoint_number', None)
                 if bp_number:
-                    r = self.change_breakpoint_state(bp_number, 
-                                                     enabled, condition=condition)
+                    r = self.change_breakpoint_state(bp_number,
+                                                     args.get('enabled', False), 
+                                                     condition=args.get('condition', ''))
                     result = {}
                     messages = []
                     if r:
-                        msg = "changeBreakpointState error: \"%s\"" % r
-                        _logger.g_error(msg)
+                        msg = "changeBreakpointState() error: \"%s\"" % r
+                        _logger.g_error("    "+msg)
                         messages = [msg]
                         command_exec_status = 'error'
                     else:
                         command_exec_status = 'ok'
                 else:
                     result = {}
-                    msg = "changeBreakpointState error: breakpointNumber parameter is required."
-                    _logger.g_error(msg)
+                    msg = "changeBreakpointState() error: missing required breakpointNumber parameter."
+                    _logger.g_error("    "+msg)
                     messages = [msg]
                     command_exec_status = 'error'
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
                                     messages=messages)
-                
-            
+                _logger.b_debug("changeBreakpointState(%s) => %s", args, command_exec_status)
+
             elif command == "clearBreakpoint":
                 # set_break(filename, lineno, temporary=0, cond=None, funcname=None)
                 # Set a new breakpoint. If the lineno line doesn't exist for the
                 # filename passed as argument, return an error message. €
                 # The filename should be in canonical form, as described in the 
                 # canonic() method.
-                _logger.b_debug("clearBreakpoint(%s)", args)
-                r = self.clear_break(args['file_name'], args['line_number'])
+                c_file_name = self.lookup_module(args['file_name'])
+                r = self.clear_break(c_file_name, args['line_number'])
                 result = {}
                 messages = []
                 if r:
@@ -862,6 +879,7 @@ class IKPdb(bdb.Bdb):
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
                                     messages=messages)
+                _logger.b_debug("clearBreakpoint(%s)", args)
             
             elif command == "getProperties":
                 messages = []
@@ -944,6 +962,16 @@ class IKPdb(bdb.Bdb):
             else:
                 _logger.g_critical("Unsupported command '%s'.", command)
                 return
+
+            if True:
+                _logger.b_debug("Current breakpoint list:")
+                for bl in bdb.Breakpoint.bplist:
+                    for bp in bdb.Breakpoint.bplist[bl]:
+                        _logger.b_debug("    %s,%s => number=%s, enabled=%s, condition=%s", 
+                                        bl, bp,
+                                        bp.number,
+                                        bp.enabled,
+                                        repr(bp.cond))
 
         
 def set_trace():
