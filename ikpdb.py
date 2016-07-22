@@ -715,7 +715,7 @@ class IKPdb(bdb.Bdb):
         bp = bdb.Breakpoint.bpbynumber[bp_number]
         if not bp:
             return "Found no breakpoint numbered %s" % bp_number
-        _logger.b_debug("change_breakpoint_state(%s, %s,condition=%s) found => %s", 
+        _logger.b_debug("    change_breakpoint_state(bp_number=%s, enabled=%s, condition=%s) found %s", 
                         bp_number,
                         enabled,
                         repr(condition),
@@ -725,10 +725,8 @@ class IKPdb(bdb.Bdb):
                 bp.enable()
             else:
                 bp.disable()
-            # manage conditional breakpoints
-            if condition:
-                bp.cond = condition
-            
+            # update condition for conditional breakpoints
+            bp.cond = condition
         return None
 
     def run(self, cmd, globals=None, locals=None):
@@ -858,7 +856,7 @@ class IKPdb(bdb.Bdb):
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
                                     messages=messages)
-                _logger.b_debug("changeBreakpointState(%s) => %s", args, command_exec_status)
+                _logger.b_debug("    command_exec_status => %s", command_exec_status)
 
             elif command == "clearBreakpoint":
                 # set_break(filename, lineno, temporary=0, cond=None, funcname=None)
@@ -967,7 +965,7 @@ class IKPdb(bdb.Bdb):
                 _logger.b_debug("Current breakpoint list:")
                 for bl in bdb.Breakpoint.bplist:
                     for bp in bdb.Breakpoint.bplist[bl]:
-                        _logger.b_debug("    %s,%s => number=%s, enabled=%s, condition=%s", 
+                        _logger.b_debug("    %s => %s => number=%s, enabled=%s, condition=%s", 
                                         bl, bp,
                                         bp.number,
                                         bp.enabled,
