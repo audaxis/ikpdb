@@ -623,6 +623,27 @@ class IKPdb(bdb.Bdb):
                 del frame.f_trace
                 frame = frame.f_back
 
+    def set_break(self, filename, lineno, temporary=0, cond = None,
+                  funcname=None, enabled=True):
+        """ Create a beakpoint. 
+        This method is overloaded to allow straight creation of disabled 
+        breakpoints
+        """
+        filename = self.canonic(filename)
+        import linecache # Import as late as possible
+        line = linecache.getline(filename, lineno)
+        if not line:
+            return 'Line %s:%d does not exist' % (filename,
+                                   lineno)
+        if not filename in self.breaks:
+            self.breaks[filename] = []
+        list = self.breaks[filename]
+        if not lineno in list:
+            list.append(lineno)
+        bp = bdb.Breakpoint(filename, lineno, temporary, cond, funcname)
+        bp.enabled = enabled
+
+
     def stop_here(self, frame):
         """ Called by dispatch function to check wether debugger must stop at
             this frame.
@@ -721,10 +742,7 @@ class IKPdb(bdb.Bdb):
                         repr(condition),
                         bp)
         if bp:
-            if enabled:
-                bp.enable()
-            else:
-                bp.disable()
+            bp.enabled = enabled
             # update condition for conditional breakpoints
             bp.cond = condition
         return None
@@ -798,7 +816,7 @@ class IKPdb(bdb.Bdb):
                 file_name = args['file_name']
                 line_number = args['line_number']
                 condition = args.get('condition', '')
-                enabled = args.get('enabled', '')
+                enabled = args.get('enabled', True)
                 _logger.b_debug("setBreakpoint(file_name=%s, line_number=%s,"
                                 " condition=%s, enabled=%s) with CWD=%s",
                                 file_name,
@@ -809,7 +827,8 @@ class IKPdb(bdb.Bdb):
                 c_file_name = self.lookup_module(file_name)
                 r = self.set_break(c_file_name, 
                                    line_number, 
-                                   cond=condition)
+                                   cond=condition,
+                                   enabled=enabled)
                 messages = []
                 if r:
                     _logger.g_error("setBreakpoint error: %s", r)
