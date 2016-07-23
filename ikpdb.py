@@ -187,7 +187,9 @@ class IKPdbConnectionHandler():
     def log_received(self, msg):
         _logger.n_debug("Received %s bytes >>>%s<<<", len(msg), msg)
     
-    def send(self, command, _id=None, result={}, command_exec_status="ok", frames=[], messages=[], warnings=[], exception=None):
+    def send(self, command, _id=None, result={}, command_exec_status="ok", 
+             frames=[], error_messages=[], warning_messages=[], info_messages=[],
+             exception=None):
         """Build a message from passed dict object and send it to debugger"""
         with self._connection_lock:
             msg = self.encode({
@@ -196,8 +198,9 @@ class IKPdbConnectionHandler():
                 'result': result,
                 'commandExecStatus': command_exec_status,
                 'frames': frames,
-                'messages': messages,
-                'warnings': warnings,
+                'info_messages': info_messages,
+                'warning_messages': warning_messages,
+                'error_messages': error_messages,
                 'exception': exception
             })
             if self._connection:
@@ -206,7 +209,8 @@ class IKPdbConnectionHandler():
                 return send_bytes_count
             raise IKPdbConnectionError("Connection lost!")
 
-    def reply(self, obj, result, command_exec_status='ok', messages=[], warnings=[]):
+    def reply(self, obj, result, command_exec_status='ok', info_messages=[], 
+              warning_messages=[], error_messages=[]):
         """Build a response from a previsoulsy received command msg, send it
            and return number of sent bytes."""
         with self._connection_lock:
@@ -214,9 +218,10 @@ class IKPdbConnectionHandler():
             if True:
                 del obj['args']
             obj['result'] = result
-            obj['commandExecStatus'] = command_exec_status,
-            obj['messages'] = messages
-            obj['warnings'] = warnings
+            obj['commandExecStatus'] = command_exec_status
+            obj['info_messages'] = info_messages
+            obj['warning_messages'] = warning_messages
+            obj['error_messages'] = error_messages
             msg = self.encode(obj)
             send_bytes_count = self._connection.sendall(msg)
             self.log_sent(msg)
@@ -295,6 +300,9 @@ class IKPdb(bdb.Bdb):
         self.stopframe = None
         self.botframe = None
         self._CWD = launch_working_directory or os.getcwd()
+        
+        # If True, debugger breaks on first line to allow user to setup some breakpoints
+        self.initial_setup_break = False  
         
         # if defined, force debugger to stop only in a specific thread
         self.stop_thread_ident = None  
@@ -526,6 +534,10 @@ class IKPdb(bdb.Bdb):
             #except SyntaxError:
             #    exec expression in global_vars, local_vars
             #    ... extract result from stdout    
+        except NameError:
+            result = "<Undefined>"
+            result_value = "Undefined"
+            result_type = "Undefined"
         except:
             t, result = sys.exc_info()[:2]
             if isinstance(t, str):
@@ -700,19 +712,36 @@ class IKPdb(bdb.Bdb):
                 and frame.f_code.co_filename=='<string>'
                 and frame.f_lineno==1):
             self._wait_for_mainpyfile = 0
-            self.set_continue()  
+            if not self.breaks:
+                self.set_step()  # We want to give user an opportunity to set breakpoints  
+                self.initial_setup_break = True  # fsend message to user 
+            else:
+                self.set_continue()  
             return
 
         # acquire breakpoint Lock before sending break command to Cloud9
         self._active_breakpoint_lock.acquire()
         frames = self.dump_frames(frame)
         exception=None
+        warning_messages = []
+
         if post_mortem:
             exception = {
                 'type': IKPdbRepr(post_mortem[1]),
-                'info': post_mortem[1].message,
+                'info': post_mortem[1].message
             }
-        remote_client.send('programBreak', frames=frames, exception=exception)
+
+        if self.initial_setup_break:
+            warning_messages = ["No breakpoints are defined ! IKPdb stopped so "
+                                "that you can setup some breakpoints then "
+                                "'Resume' execution."]
+            self.initial_setup_break = False
+
+        remote_client.send('programBreak', 
+                           frames=frames,
+                           result={'executionStatus': 'stopped'},
+                           warning_messages=warning_messages,
+                           exception=exception)
         self.setup(frame, None)  # Reconfigure frame, stack and locals
         self.command_loop(post_mortem=post_mortem)
         
@@ -748,7 +777,7 @@ class IKPdb(bdb.Bdb):
         return None
 
     def run(self, cmd, globals=None, locals=None):
-        """ overloaded to debug multithreaded programm"""
+        """ overloaded to debug multithreaded programs"""
         if globals is None:
             import __main__
             globals = __main__.__dict__
@@ -829,10 +858,10 @@ class IKPdb(bdb.Bdb):
                                    line_number, 
                                    cond=condition,
                                    enabled=enabled)
-                messages = []
+                error_messages = []
                 if r:
                     _logger.g_error("setBreakpoint error: %s", r)
-                    messages = [r]
+                    error_messages = [r]
                     result = {}
                     command_exec_status = 'error'
                 else:
@@ -845,7 +874,7 @@ class IKPdb(bdb.Bdb):
                     command_exec_status = 'ok'
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
-                                    messages=messages)
+                                    error_messages=error_messages)
             
             elif command == "changeBreakpointState":
                 # Allows to:
@@ -858,11 +887,11 @@ class IKPdb(bdb.Bdb):
                                                      args.get('enabled', False), 
                                                      condition=args.get('condition', ''))
                     result = {}
-                    messages = []
+                    error_messages = []
                     if r:
                         msg = "changeBreakpointState() error: \"%s\"" % r
                         _logger.g_error("    "+msg)
-                        messages = [msg]
+                        error_messages = [msg]
                         command_exec_status = 'error'
                     else:
                         command_exec_status = 'ok'
@@ -870,11 +899,11 @@ class IKPdb(bdb.Bdb):
                     result = {}
                     msg = "changeBreakpointState() error: missing required breakpointNumber parameter."
                     _logger.g_error("    "+msg)
-                    messages = [msg]
+                    error_messages = [msg]
                     command_exec_status = 'error'
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
-                                    messages=messages)
+                                    error_messages=error_messages)
                 _logger.b_debug("    command_exec_status => %s", command_exec_status)
 
             elif command == "clearBreakpoint":
@@ -886,31 +915,31 @@ class IKPdb(bdb.Bdb):
                 c_file_name = self.lookup_module(args['file_name'])
                 r = self.clear_break(c_file_name, args['line_number'])
                 result = {}
-                messages = []
+                error_messages = []
                 if r:
                     _logger.g_error("clearBreakpoint error: %s", r)
-                    messages = [r]
+                    error_messages = [r]
                     command_exec_status = 'error'
                 else:
                     command_exec_status = 'ok'
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
-                                    messages=messages)
+                                    error_messages=error_messages)
                 _logger.b_debug("clearBreakpoint(%s)", args)
             
             elif command == "getProperties":
-                messages = []
+                error_messages = []
                 po_value = ctypes.cast(args['id'], ctypes.py_object).value
                 result={'properties': self.extract_object_properties(po_value) or []}
                 command_exec_status = 'ok'
                 _logger.e_debug("getProperties(%s) => %s", args, result)
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
-                                    messages=messages)
+                                    error_messages=error_messages)
 
             elif command == "setVariable":
                 _logger.e_debug("setVariable(%s)", args)
-                messages = []
+                error_messages = []
                 result = {}
                 sv_frame = ctypes.cast(args['frame'], ctypes.py_object).value
                 try:
@@ -922,13 +951,13 @@ class IKPdb(bdb.Bdb):
                 except:
                     command_exec_status = 'error'
                     msg = "setVariable error: failed to let %s to var with id: %s" % (args['id'], args['value'],)
-                    messages = [msg]
+                    error_messages = [msg]
                     _logger.e_error(msg)
                 command_exec_status = 'ok'
                 remote_client.reply(obj, 
                                     result, 
                                     command_exec_status=command_exec_status,
-                                    messages=messages)
+                                    error_messages=error_messages)
 
             elif command == 'runScript':
                 _logger.x_debug("runScript(%s)", args)
@@ -964,7 +993,7 @@ class IKPdb(bdb.Bdb):
                 self._active_breakpoint_lock.release()
                 return 1
 
-            elif command == 'evaluate':  # <=> Pdb p command
+            elif command == 'evaluate':
                 _logger.e_debug("evaluate(%s)", args)
                 value, result_type = self.evaluate(args['frame'], args['expression'], args['global'], disable_break=args['disableBreak'])
                 if value:
@@ -974,7 +1003,7 @@ class IKPdb(bdb.Bdb):
                     remote_client.reply(obj,
                                         {},
                                         command_exec_status="error",
-                                        messages=[result_type])
+                                        error_messages=[result_type])
 
             else:
                 _logger.g_critical("Unsupported command '%s'.", command)
@@ -982,6 +1011,9 @@ class IKPdb(bdb.Bdb):
 
             if True:
                 _logger.b_debug("Current breakpoint list:")
+                if not bdb.Breakpoint.bplist:
+                    _logger.b_debug("    <empty>") 
+                                        
                 for bl in bdb.Breakpoint.bplist:
                     for bp in bdb.Breakpoint.bplist[bl]:
                         _logger.b_debug("    %s => %s => number=%s, enabled=%s, condition=%s", 
@@ -1019,10 +1051,6 @@ def post_mortem(trace_back, exc_info=None):
         
     ikpdb.forget()
     _logger.g_info("Post mortem debugger finished.")
-
-
-
-
 
 ##
 # Signal Handler to properly close socket connection
@@ -1069,7 +1097,11 @@ def main():
     parser.add_argument("-ik_l", "--ikpdb-log",
                         dest="IKPDB_LOG",
                         default='',
-                        help="Logger command string. See documentation")
+                        help="Logger command string.")
+    parser.add_argument("-ik_w", "--ikpdb-welcome",
+                        dest="IKPDB_SEND_WELCOME_MESSAGE",
+                        default=True,
+                        help="Send a Welcome 'start' message at client connection.")
     parser.add_argument("script_command_args",
                         metavar="scriptfile [args]",
                         help="Debugged script followed by all his args.",
@@ -1082,7 +1114,9 @@ def main():
     # debugged script with all IKPdb args removed
     sys.argv = cmd_line_args.script_command_args
 
-    _logger.g_debug("Launched with cmd_line_args=%s, CWD='%s'", cmd_line_args, os.getcwd())
+    _logger.g_debug("CWD: '%s'", os.getcwd())
+    _logger.g_debug("Interpreter: '%s'", sys.executable)
+    _logger.g_debug("Args: %s", cmd_line_args)
     _logger.g_info("Starts debugging: '%s'", " ".join(sys.argv))
     
     if not sys.argv[0:]:
@@ -1132,10 +1166,8 @@ def main():
     global ikpdb
     ikpdb = IKPdb()
 
-    # Send welcome message
-    # TODO: Add a command line parameter to disable ( --welcome-message=0 or 1 )
-    if True:  
-        remote_client.send("start", messages=["Welcome", "IKPdb", "version=0.1"])
+    if cmd_line_args.IKPDB_SEND_WELCOME_MESSAGE:  
+        remote_client.send("start", info_messages=["Welcome to", "IKPdb", "0.1"])
 
     # Launch debugging
     try:
