@@ -768,6 +768,25 @@ class IKPdb(bdb.Bdb):
     # breakpoints related methods
     # In a future must be moved to a new Breakpoint class
     #
+    def get_breakpoints_list(self):
+        """Returns a list of all breakpoints with their complete state.
+        Each breakpoint is described by a dict.
+        Warning: IKPDb line numbers are 1 based ; any line number conversion
+        must be done by clients (eg. inouk.ikpdb for Cloud9)
+        """
+        breakpoints_list = []
+        for breakpoint in bdb.Breakpoint.bpbynumber:
+            if breakpoint:  # breakpoint #0 exists and is always None
+                bp_dict = {
+                    'breakpoint_number': breakpoint.number,
+                    'file_name': breakpoint.file,
+                    'line_number': breakpoint.line,
+                    'condition': breakpoint.cond,
+                    'enabled': breakpoint.enabled,
+                }
+                all_breakpoints_state.append(bp_dict)
+        return breakpoints_list
+        
     def get_breakpoint_number(self, filename, line):
         """lookup breakpoint by filename and line number and returns 
         its' number.
@@ -827,6 +846,7 @@ class IKPdb(bdb.Bdb):
                 breakpoint.enabled = False
         return
 
+
     def run(self, cmd, globals=None, locals=None):
         """ overloaded to debug multithreaded programs"""
         if globals is None:
@@ -879,12 +899,9 @@ class IKPdb(bdb.Bdb):
             args = obj['args']
         
             if command == 'getBreakpoints':
-                _logger.b_warning("getBreakpoints(%s) is not implemented and return []", args)
-                breakpoint_list = self.get_all_breaks()
-                # TODO: Derive it from object list
-                result = []  
-                # TODO: Warning IKPDb line numbers are 1 based vs c9 0 based
-                remote_client.reply(obj, result)
+                breakpoints_list = self.get_breakpoints_list()
+                remote_client.reply(obj, breakpoints_list)
+                _logger.b_debug("getBreakpoints(%s) => %s", args, breakpoints_list)
                 
             elif command == "setBreakpoint":
                 # TODO: manage conditionnals
