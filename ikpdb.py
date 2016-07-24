@@ -519,8 +519,9 @@ class IKPdb(bdb.Bdb):
         Retursn a tuple of value and type both as str.
         """
         if disable_break:
-            _logger.e_warning("Unsupported value (True) for disable_break ignored in evaluate()")
-        
+            breakpoints_backup = self.backup_breakpoints_state()
+            self.disable_all_breakpoints()
+
         if frame_id and not global_context:
             eval_frame = ctypes.cast(frame_id, ctypes.py_object).value
             global_vars = eval_frame.f_globals
@@ -560,6 +561,10 @@ class IKPdb(bdb.Bdb):
             else: 
                 result_type = t.__name__
             result_value = "%s: %s" % (result_type, result,)
+
+        if disable_break:
+            self.restore_breakpoints_state(breakpoints_backup)
+
         _logger.e_debug("evaluate(%s) => value = %s:%s | %s", expression, result_value, result_type, result)
         return result_value, result_type
 
@@ -759,10 +764,14 @@ class IKPdb(bdb.Bdb):
         self.setup(frame, None)  # Reconfigure frame, stack and locals
         self.command_loop(post_mortem=post_mortem)
         
-
+    #####
+    # breakpoints related methods
+    # In a future must be moved to a new Breakpoint class
+    #
     def get_breakpoint_number(self, filename, line):
-        """lookup breakpoint by filename and line number and returns number 
-            its' number"""
+        """lookup breakpoint by filename and line number and returns 
+        its' number.
+        """
         cfile = self.lookup_module(filename)
         for bp in bdb.Breakpoint.bpbynumber:
             if bp and bp.file == cfile and bp.line == line:
@@ -789,6 +798,34 @@ class IKPdb(bdb.Bdb):
             # update condition for conditional breakpoints
             bp.cond = condition
         return None
+
+    def backup_breakpoints_state(self):
+        """Returns the state of all breakpoints"""
+        all_breakpoints_state = []
+        for breakpoint in bdb.Breakpoint.bpbynumber:
+            if breakpoint:  # breakpoint #0 exists and is always None
+                all_breakpoints_state.append((breakpoint.number, 
+                                              breakpoint.enabled, 
+                                              breakpoint.cond,))
+        return all_breakpoints_state
+
+    def restore_breakpoints_state(self, breakpoints_state_list):
+        """Restore the state of breakpoints given a list.
+        breakpoints_state_list is a list of tuple. Each tuple is of form:
+        (breakpoint_number, enabled,)
+        """
+        for breakpoint_state in breakpoints_state_list:
+            self.change_breakpoint_state(breakpoint_state[0],
+                                         breakpoint_state[1],
+                                         breakpoint_state[2])
+        return
+
+    def disable_all_breakpoints(self):
+        """Disable all breakpointss"""
+        for breakpoint in bdb.Breakpoint.bpbynumber:
+            if breakpoint:  # breakpoint #0 exists and is always None
+                breakpoint.enabled = False
+        return
 
     def run(self, cmd, globals=None, locals=None):
         """ overloaded to debug multithreaded programs"""
