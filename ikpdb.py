@@ -15,6 +15,7 @@ import threading
 import types, ctypes
 import argparse
 import datetime
+import cStringIO
 
 # For now ikpdb is a singleton
 ikpdb = None 
@@ -279,8 +280,8 @@ class IKPdbException(Exception):
 
 
 def IKPdbRepr(t):
-    """returns a type reprsentation suitable for debugger gui
-    :param t: a thing
+    """returns a type representation suitable for debugger GUI
+    :param t: anyThing
     """
     if hasattr(t, '__class__'):
         return t.__class__.__name__
@@ -301,7 +302,8 @@ class IKPdb(bdb.Bdb):
         self.botframe = None
         self._CWD = launch_working_directory or os.getcwd()
         
-        # If True, debugger breaks on first line to allow user to setup some breakpoints
+        # If True, debugger breaks on first line to allow user to setup 
+        # some breakpoints.
         self.initial_setup_break = False  
         
         # if defined, force debugger to stop only in a specific thread
@@ -422,8 +424,8 @@ class IKPdb(bdb.Bdb):
             return count
 
     def extract_object_properties(self, o):
-        """ extracts all properties from an object (eg. f_locals, f_globals, 
-            user dict, instance ...) and returns them as an array of variables
+        """Extracts all properties from an object (eg. f_locals, f_globals, 
+        user dict, instance ...) and returns them as an array of variables
         """
         _logger.e_debug("extract_object_properties(%s)", o)
         var_list = []
@@ -511,8 +513,11 @@ class IKPdb(bdb.Bdb):
 
 
     def evaluate(self, frame_id, expression, global_context=False, disable_break=False):
-        """ evaluate given expression in the givent frame 
-            or globally and return a tuple of value and type as str"""
+        """ evaluate 'expression' in the context of the frame identified by
+        'frame_id' or globally.
+        Breakpoints are disabled depending on 'disable_break' value.
+        Retursn a tuple of value and type both as str.
+        """
         if disable_break:
             _logger.e_warning("Unsupported value (True) for disable_break ignored in evaluate()")
         
@@ -523,29 +528,38 @@ class IKPdb(bdb.Bdb):
         else:
             global_vars = None
             local_vars = None
-        try:
+
+        try: 
             result = eval(expression, 
                           global_vars,
                           local_vars)
             result_type = IKPdbRepr(result)
             result_value = repr(result)
-            # TODO: support statement execution
-            #try: ...
-            #except SyntaxError:
-            #    exec expression in global_vars, local_vars
-            #    ... extract result from stdout    
-        except NameError:
-            result = "<Undefined>"
-            result_value = "Undefined"
-            result_type = "Undefined"
+        except SyntaxError:
+            try:
+                # From: http://stackoverflow.com/questions/3906232/python-get-the-print-output-in-an-exec-statement
+                sys_stdout = sys.stdout
+                eval_stdout = cStringIO.StringIO()
+                sys.stdout = eval_stdout
+                exec(expression, global_vars, local_vars)
+                sys.stdout = sys_stdout
+                result_value = "<plaintext>%s" % eval_stdout.getvalue()
+                result_type = "str"
+                result = result_value
+            except Exception as e:
+                t, result = sys.exc_info()[:2]
+                if isinstance(t, str):
+                    result_type = t
+                else: 
+                    result_type = str(t.__name__)
+                result_value = "%s: %s" % (result_type, result,)
         except:
             t, result = sys.exc_info()[:2]
             if isinstance(t, str):
                 result_type = t
             else: 
                 result_type = t.__name__
-            result_value = None
-            result_type = "%s: %s" % (result_type, result,)
+            result_value = "%s: %s" % (result_type, result,)
         _logger.e_debug("evaluate(%s) => value = %s:%s | %s", expression, result_value, result_type, result)
         return result_value, result_type
 
@@ -928,11 +942,17 @@ class IKPdb(bdb.Bdb):
                 _logger.b_debug("clearBreakpoint(%s)", args)
             
             elif command == "getProperties":
+                _logger.e_debug("getProperties(%s)", args)
                 error_messages = []
-                po_value = ctypes.cast(args['id'], ctypes.py_object).value
-                result={'properties': self.extract_object_properties(po_value) or []}
-                command_exec_status = 'ok'
-                _logger.e_debug("getProperties(%s) => %s", args, result)
+                if args.get('id', False):
+                    po_value = ctypes.cast(args['id'], ctypes.py_object).value
+                    result={'properties': self.extract_object_properties(po_value) or []}
+                    command_exec_status = 'ok'
+                else:
+                    result={'properties': self.extract_object_properties(None) or []}
+                    command_exec_status = 'ok'
+                    
+                _logger.e_debug("    => %s", result)
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
                                     error_messages=error_messages)
@@ -996,14 +1016,7 @@ class IKPdb(bdb.Bdb):
             elif command == 'evaluate':
                 _logger.e_debug("evaluate(%s)", args)
                 value, result_type = self.evaluate(args['frame'], args['expression'], args['global'], disable_break=args['disableBreak'])
-                if value:
-                    remote_client.reply(obj,
-                                        {'value': value, 'type': result_type})  # result
-                else:
-                    remote_client.reply(obj,
-                                        {},
-                                        command_exec_status="error",
-                                        error_messages=[result_type])
+                remote_client.reply(obj, {'value': value, 'type': result_type})  # result
 
             else:
                 _logger.g_critical("Unsupported command '%s'.", command)
