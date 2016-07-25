@@ -1181,10 +1181,10 @@ def main():
     # debugged script with all IKPdb args removed
     sys.argv = cmd_line_args.script_command_args
 
-    _logger.g_debug("CWD: '%s'", os.getcwd())
     _logger.g_debug("Interpreter: '%s'", sys.executable)
     _logger.g_debug("Args: %s", cmd_line_args)
     _logger.g_info("Starts debugging: '%s'", " ".join(sys.argv))
+    _logger.g_info("With CWD: '%s'", os.getcwd())
     
     if not sys.argv[0:]:
         print "Error: scriptfile argument is required"
