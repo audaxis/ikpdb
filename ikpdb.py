@@ -784,7 +784,7 @@ class IKPdb(bdb.Bdb):
                     'condition': breakpoint.cond,
                     'enabled': breakpoint.enabled,
                 }
-                all_breakpoints_state.append(bp_dict)
+                breakpoints_list.append(bp_dict)
         return breakpoints_list
         
     def get_breakpoint_number(self, filename, line):
