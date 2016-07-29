@@ -172,6 +172,7 @@ class IKPdbConnectionHandler():
         self._connection = connection
         self._connection_lock = threading.Lock()
         self._received_data = ''
+        self._network_loop = True
 
     def encode(self, obj):
         json_obj = json.dumps(obj)
@@ -231,7 +232,7 @@ class IKPdbConnectionHandler():
     def receive(self):
         """Waits for a message from the debugger and returns it as a dict"""
         with self._connection_lock:
-            while True:
+            while self._network_loop:
                 _logger.n_debug("Enter socket.recv(%s) with self._received_data = %s)", 
                                 self.SOCKET_BUFFER_SIZE, 
                                 self._received_data)
@@ -1239,7 +1240,10 @@ def main():
     # Launch debugging
     try:
         ikpdb.mainpyfile = mainpyfile
-        ikpdb.command_loop()
+        #ikpdb.command_loop()
+        debugger_thread = threading.Thread(target=ikpdb.command_loop, args=())
+        debugger_thread.start()
+        debugger_thread.join()
         remote_client.send('programEnd', 
                            result={'exit_code': None, 
                                    'executionStatus': 'terminated'}, 
