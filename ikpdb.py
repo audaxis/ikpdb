@@ -19,6 +19,7 @@ import cStringIO
 
 # For now ikpdb is a singleton
 ikpdb = None 
+__version__ = "0.9.0"
 
 ##
 # logging
@@ -1150,8 +1151,8 @@ def signal_handler(signal, frame):
 #
 def main():
 
-    parser = argparse.ArgumentParser(description="IKPdb %s - Inouk Python Debugger for CPython 2.7",
-                                     epilog="(c) 2016 Cyril MORISSE")
+    parser = argparse.ArgumentParser(description="IKPdb %s - Inouk Python Debugger for CPython 2.7" % __version__,
+                                     epilog="(c) 2016 Cyril MORISSE - @cmorisse")
     parser.add_argument("-ik_a","--ikpdb-address", 
                         default='127.0.0.1',
                         dest="IKPDB_ADDRESS",
@@ -1181,10 +1182,11 @@ def main():
     # debugged script with all IKPdb args removed
     sys.argv = cmd_line_args.script_command_args
 
-    _logger.g_debug("Interpreter: '%s'", sys.executable)
-    _logger.g_debug("Args: %s", cmd_line_args)
-    _logger.g_info("Starts debugging: '%s'", " ".join(sys.argv))
-    _logger.g_info("With CWD: '%s'", os.getcwd())
+    _logger.g_info("IKPdb %s - Inouk Python Debugger for CPython 2.7", __version__)
+    _logger.g_debug("  interpreter: '%s'", sys.executable)
+    _logger.g_debug(" args: %s", cmd_line_args)
+    _logger.g_debug("  starts debugging: '%s'", " ".join(sys.argv))
+    _logger.g_debug("  with CWD = '%s'", os.getcwd())
     
     if not sys.argv[0:]:
         print "Error: scriptfile argument is required"
