@@ -3,7 +3,6 @@
 import socket
 import sys
 import os
-import bdb
 import atexit
 import signal
 import json
@@ -23,9 +22,9 @@ ikpdb = None
 __version__ = "1.0.0-alpha"
 
 ##
-# logging
+# Logging System
 # IKPdb has it's own logging system distinct from python logging to
-# avoid collision when debugging programs that reconfigure logging
+# avoid collision when debugging programs which reconfigure logging
 # system wide.
 #
 # logging is organized in domains (which corresponds to loggers)
@@ -150,11 +149,10 @@ _logger = IKPdbLogger
 
 
 ##
-# Network connection
+# Network Manager
 #
 class IKPdbConnectionError(Exception):
     pass
-
 
 class IKPdbConnectionHandler():
     """ Manages a connection with a remote client. 
@@ -277,7 +275,6 @@ class IKPdbConnectionHandler():
 # Debugger
 #
 
-
 class IKPdbException(Exception):
     pass
 
@@ -293,11 +290,93 @@ def IKPdbRepr(t):
     t_type = type(t)
     return str(t_type).split(' ')[1][1:-2]
         
+class IKBreakpoint:
+    """Breakpoints manager.
     
-class IKPdb(bdb.Bdb):
+    This class manages 3 lists of breakpoints:
+     - `breakpoints_files` contains all breakpoints line numbers indexed by file_name
+     - `breakpoints_by_file_and_line` contains all breakpoints indexed by (file, line)
+     - `
+    
+    """
+    breakpoints_files = {}  # list of lines indexed by __CANONICAL__ file names
+    breakpoints_by_file_and_line = {}  # breakpoint indexed by (CANONICAL_file, line)
+    breakpoints_by_number = []  # indexed by number with value = breakpoint.
+    
+    next_breakpoint_number = 0
+    any_active_breakpoint = False
+    
+    def __init__(self, file_name, line_number, condition=None, enabled=True):
+        """
+        :param file_name: a CANONICAL file name
+        """
+        self.file_name = file_name    # In canonical form!
+        self.line_number = line_number
+        self.condition = condition
+        self.enabled = enabled
+        
+        # Allocate number
+        self.number = IKBreakpoint.next_breakpoint_number
+        IKBreakpoint.next_breakpoint_number += 1
+        
+        # update all lists
+        IKBreakpoint.breakpoints_by_number.append(self)
+        IKBreakpoint.breakpoints_by_file_and_line[file_name, line_number] = self
+        IKBreakpoint.breakpoints_files[file_name] = \
+            IKBreakpoint.breakpoints_files.get(file_name, [])+[file_name]
+        if enabled:
+            IKBreakpoint.any_active_breakpoint = True            
+
+    @classmethod
+    def lookup_effective_breakpoint(cls, file_name, line_number, frame):
+        """ Checks if there is an enabled breakpoint at given file_name and 
+        line_number. Check breakpoint condition is any.
+        :returns: found, enabled and condition verified breakpoint or None
+        :rtype: IKPdbBreakpoint
+        """
+        bp = cls.breakpoints_by_file_and_line.get((file_name, line_number), None)
+        if not bp:
+            return None
+            
+        if not bp.enabled:
+            return None
+            
+        if not bp.condition:
+            return bp
+        try:
+            value = eval(bp.condition, frame.f_globals, frame.f_locals)
+            return bp if value else None
+        except:
+            pass
+        return None
+
+    @classmethod
+    def get_breakpoints_list(cls):
+        """Returns a list of all breakpoints with their complete state in a 
+        dict.
+        Warning: IKPDb line numbers are 1 based so line number conversion
+        must be done by clients (eg. inouk.ikpdb for Cloud9)
+        """
+        breakpoints_list = []
+        for bp in IKBreakpoint.breakpoints_by_number:
+            if bp:  # breakpoint #0 exists and is always None
+                bp_dict = {
+                    'breakpoint_number': bp.number,
+                    'file_name': bp.file_name,
+                    'line_number': bp.line_number,
+                    'condition': bp.condition,
+                    'enabled': bp.enabled,
+                }
+                breakpoints_list.append(bp_dict)
+        return breakpoints_list
+
+    
+class IKPdb():
     
     def __init__(self, skip=None, launch_working_directory=None):
-        #bdb.Bdb.__init__(self, skip=skip)
+        self.skip = set(skip) if skip else None
+        self.file_name_cache = {}        
+        
         self._CWD = launch_working_directory or os.getcwd()
         self.mainpyfile = ''
         self._active_breakpoint_lock = threading.Lock()
@@ -310,8 +389,8 @@ class IKPdb(bdb.Bdb):
         self.frame_stop = None
         self.frame_calling = None
         self.frame_return = None
-        
-        self.botframe = None
+
+        # to dump only program frames        
         self.frame_beginning = None
         
         # If True, debugger breaks on first line to allow user to setup 
@@ -319,79 +398,53 @@ class IKPdb(bdb.Bdb):
         self.initial_setup_break = False  
         
 
-    def canonic(self, filename):
+    def canonic(self, file_name):
         """ returns canonical version of a file name.
         A canonical file name is an absolute, lowercase normalized path 
         to a given file.
         """
-        if filename == "<" + filename[1:-1] + ">":
-            return filename
-        canonic = self.fncache.get(filename)
-        if not canonic:
-            canonic = os.path.abspath(filename)
-            canonic = os.path.normcase(canonic)
-            self.fncache[filename] = canonic
-        return canonic
+        if file_name == "<" + file_name[1:-1] + ">":
+            return file_name
+        c_file_name = self.file_name_cache.get(file_name)
+        if not c_file_name:
+            c_file_name = os.path.abspath(file_name)
+            c_file_name = os.path.normcase(c_file_name)
+            self.file_name_cache[file_name] = c_file_name
+        return c_file_name
 
-    def lookup_module(self, filename):
-        """Helper function for break/clear parsing -- may be overridden.
-        lookup_module() translates (possibly incomplete) file or module name
-        into an absolute file name.
+    def lookup_module(self, file_name):
+        """Translate a (possibly incomplete) file or module name into an 
+        absolute file name.
         """
-        _logger.p_debug("lookup_module(%s) with os.getcwd()=>%s", filename, os.getcwd())
-        if os.path.isabs(filename) and os.path.exists(filename):
-            return filename
+        _logger.p_debug("lookup_module(%s) with os.getcwd()=>%s", file_name, os.getcwd())
+        if os.path.isabs(file_name) and os.path.exists(file_name):
+            return file_name
             
         # Can we find file relatively to launch script
-        f = os.path.join(sys.path[0], filename)  
+        f = os.path.join(sys.path[0], file_name)  
         if os.path.exists(f) and self.canonic(f) == self.mainpyfile:
             return f
             
         # Can we find the file relatively to launch CWD (useful with buildout)
-        f = os.path.join(self._CWD, filename)  
+        f = os.path.join(self._CWD, file_name)  
         if  os.path.exists(f):
             return f
 
         # Try as an absolute path after adding .py extension 
-        root, ext = os.path.splitext(filename)
+        root, ext = os.path.splitext(file_name)
         if ext == '':
-            filename = filename + '.py'
-        if os.path.isabs(filename):
-            return filename
+            file_name = file_name + '.py'
+        if os.path.isabs(file_name):
+            return file_name
         
         # Cand we find the file in system path
-        for dirname in sys.path:
-            while os.path.islink(dirname):
-                dirname = os.readlink(dirname)
-            fullname = os.path.join(dirname, filename)
-            if os.path.exists(fullname):
-                return fullname
+        for dir_name in sys.path:
+            while os.path.islink(dir_name):
+                dir_name = os.readlink(dir_name)
+            full_name = os.path.join(dir_name, file_name)
+            if os.path.exists(full_name):
+                return full_name
         return None
-
-    def forget(self):
-        """resets debugging state variables."""
-        self.lineno = None
-        self.stack = []
-        self.curindex = 0  # current stack index
-        self.curframe = None
-
-    def setup(self, f, t):
-        self.forget()
-        self.stack, self.curindex = self.get_stack(f, t)
-        self.curframe = self.stack[self.curindex][0]
-        # The f_locals dictionary is updated from the actual frame
-        # locals whenever the .f_locals accessor is called, so we
-        # cache it here to ensure that modifications are not overwritten.
-        self.curframe_locals = self.curframe.f_locals
-
-    def remove_setup(self, f, t):
-        self.forget()
-        self.stack, self.curindex = self.get_stack(f, t)
-        self.curframe = self.stack[self.curindex][0]
-        # The f_locals dictionary is updated from the actual frame
-        # locals whenever the .f_locals accessor is called, so we
-        # cache it here to ensure that modifications are not overwritten.
-        self.curframe_locals = self.curframe.f_locals
 
     def object_properties_count(self, o):
         """ returns the number of user browsable properties of an object. """
@@ -495,15 +548,15 @@ class IKPdb(bdb.Bdb):
         # Browse the frame chain as far as we can
         _logger.f_debug("dump_frames(), frame analysis:")
         spacer = ""
-        while hasattr(frame_browser, 'f_back') and frame_browser.f_back != self.botframe:
+        while hasattr(frame_browser, 'f_back') and frame_browser.f_back != self.frame_beginning:
             spacer += "="
             _logger.f_debug("%s>frame = %s, frame.f_code = %s, frame.f_back = %s, "
-                            "self.botframe = %s",
+                            "self.frame_beginning = %s",
                             spacer,
                             hex(id(frame_browser)),
                             frame_browser.f_code,
                             hex(id(frame_browser.f_back)),
-                            hex(id(self.botframe)))
+                            hex(id(self.frame_beginning)))
                                 
             # Update local variables (User can use watch expressions for globals)
             locals_vars_list = self.extract_object_properties(frame_browser.f_locals)
@@ -578,7 +631,7 @@ class IKPdb(bdb.Bdb):
         _logger.e_debug("evaluate(%s) => value = %s:%s | %s", expression, result_value, result_type, result)
         return result_value, result_type
 
-    def set_step_over(self, frame):
+    def setup_step_over(self, frame):
         """Setup debugger for a "stepOver"
         """
         self.quitting = False
@@ -588,17 +641,17 @@ class IKPdb(bdb.Bdb):
         self.pending_stop = True 
         return
 
-    def set_step_into(self, frame):
+    def setup_step_into(self, frame):
         """Setup debugger for a "stepInto"
         """
         self.quitting = False
         self.frame_calling = frame
         self.frame_stop = frame
-        self.frame_return = frame.f_back
+        self.frame_return = None
         self.pending_stop = True 
         return
 
-    def set_step_out(self, frame):
+    def setup_step_out(self, frame):
         """Setup debugger for a "stepOut"
         """
         self.quitting = False
@@ -615,38 +668,27 @@ class IKPdb(bdb.Bdb):
         self.frame_calling = None
         self.frame_stop = None
         self.frame_return = None
-        self.pending_stop = False if self.breaks is None else True
+        self.pending_stop = IKBreakpoint.any_active_breakpoint
         # TODO: Remove trace function everywhere and reinstall it if a breakpoint is SET
         return
+
+    def set_trace(self, frame=None):
+        """Start debugging from "frame".
+        If frame is not specified, debugging starts from caller's frame.
+        """
+        if frame is None:
+            frame = sys._getframe().f_back
+        self._line_tracer(frame)
 
     def reset(self):
         """ Resets debugger status and set it to run
         """
+        print "===============================================reset()"
         import linecache
         linecache.checkcache()
         self.frame_beginning = None
         self.setup_resume()
 
-    def set_breakpoint(self, filename, lineno, temporary=0, cond=None, 
-                       funcname=None, enabled=True):
-        """ Create a breakpoint. 
-        This method is overloaded to allow straight creation of disabled 
-        breakpoints
-        """
-        filename = self.canonic(filename)
-        import linecache # Import as late as possible
-        line = linecache.getline(filename, lineno)
-        if not line:
-            return 'Line %s:%d does not exist' % (filename, lineno)
-        if not filename in self.breaks:
-            self.breaks[filename] = []
-        list = self.breaks[filename]
-        if not lineno in list:
-            list.append(lineno)
-        bp = bdb.Breakpoint(filename, lineno, temporary, cond, funcname)
-        bp.enabled = enabled
-        # TODO: rework to analyze all breakpoints state
-        self.pending_stop = True
 
 
     def _tracer(self, frame, event, arg):
@@ -663,14 +705,9 @@ class IKPdb(bdb.Bdb):
         
         if event == 'call':
             print "============> event 'call'"
-            
-            #if self.frame_beginning is None:
-            if self.botframe is None:  
+            if self.frame_beginning is None:  
                 # First call of dispatch since reset()
-                self.frame_beginning = frame.f_back # (CT) Note that this may also be None!
-                self.botframe = frame.f_back
-                print "============> frame_beginning set"
-
+                self.frame_beginning = frame.f_back
             return self._tracer
             
         if event == 'return':
@@ -711,10 +748,10 @@ class IKPdb(bdb.Bdb):
         if self.frame_calling and self.frame_calling==frame.f_back:
             return True
         # step over
-        if self.frame_stop==frame:  # frame cannot be null
+        if frame==self.frame_stop:  # frame cannot be null
             return True
         # step out
-        if self.frame_return==frame:  # frame cannot be null
+        if frame==self.frame_return:  # frame cannot be null
             return True
         return False
 
@@ -725,30 +762,13 @@ class IKPdb(bdb.Bdb):
         _logger.b_debug("should_break_here(filename=%s, lineno=%s) with breaks=%s",
                         frame.f_code.co_filename,
                         frame.f_lineno,
-                        self.breaks)
-        filename = self.canonic(frame.f_code.co_filename)
-        if not filename in self.breaks:
-            return False
-            
-        lineno = frame.f_lineno
-        if not lineno in self.breaks[filename]:
-            # The line itself has no breakpoint, but maybe the line is the
-            # first line of a function with breakpoint set by function name.
-            lineno = frame.f_code.co_firstlineno
-            if not lineno in self.breaks[filename]:
-                return False
-
-        # flag says ok to delete temp. bp
-        (bp, flag) = bdb.effective(filename, lineno, frame)
-        print "============> bp=%s, flag=%s" % (bp, flag,)
-        if bp:
-            self.currentbp = bp.number
-            if (flag and bp.temporary):
-                self.do_clear(str(bp.number))
-            print "============> should_break_here return True"
-            return True
-        else:
-            return False
+                        IKBreakpoint.breakpoints_by_number)
+        
+        c_file_name = self.canonic(frame.f_code.co_filename)
+        bp = IKBreakpoint.lookup_effective_breakpoint(c_file_name, 
+                                                      frame.f_lineno, 
+                                                      frame)
+        return True if bp else False
 
 
     def _line_tracer(self, frame, post_mortem=False):
@@ -799,48 +819,35 @@ class IKPdb(bdb.Bdb):
         # - step over
         # - step into
         # - step out
-        
+        # then resume execution
         resume_command = self._resume_command_q.get()
-        
-        # TODO: What's this is doing ?
-        self.setup(frame, None)  # Reconfigure frame, stack and locals
         if resume_command == 'resume':
             self.setup_resume()
         elif resume_command == 'stepOver':
-            self.set_step_over(frame)
+            self.setup_step_over(frame)
         elif resume_command == 'stepInto':
-            self.set_step_into(frame)
+            self.setup_step_into(frame)
         elif resume_command == 'stepOut':
-            self.set_step_out(frame)
+            self.setup_step_out(frame)
         else:
             raise IKPdbQuit("Not implemented")
-        print "====================> lock release()"
+            
         self._active_breakpoint_lock.release()
         return
         
-    #####
-    # breakpoints related methods
-    # In a future must be moved to a new Breakpoint class
-    #
-    def get_breakpoints_list(self):
-        """Returns a list of all breakpoints with their complete state.
-        Each breakpoint is described by a dict.
-        Warning: IKPDb line numbers are 1 based ; any line number conversion
-        must be done by clients (eg. inouk.ikpdb for Cloud9)
+    def set_breakpoint(self, file_name, line_number, condition=None, enabled=True):
+        """ Create a breakpoint, register it in the class's lists and returns
+        a tuple of (error_message, break_number)
         """
-        breakpoints_list = []
-        for breakpoint in bdb.Breakpoint.bpbynumber:
-            if breakpoint:  # breakpoint #0 exists and is always None
-                bp_dict = {
-                    'breakpoint_number': breakpoint.number,
-                    'file_name': breakpoint.file,
-                    'line_number': breakpoint.line,
-                    'condition': breakpoint.cond,
-                    'enabled': breakpoint.enabled,
-                }
-                breakpoints_list.append(bp_dict)
-        return breakpoints_list
-        
+        c_file_name = self.canonic(file_name)
+        import linecache # Import as late as possible
+        line = linecache.getline(c_file_name, line_number)
+        if not line:
+            return 'Line %s:%d does not exist' % (c_file_name, line_number), None
+        bp = IKBreakpoint(c_file_name, line_number, condition, enabled)
+        self.pending_stop = IKBreakpoint.any_active_breakpoint
+        return None, bp.number
+
     def get_breakpoint_number(self, filename, line):
         """lookup breakpoint by filename and line number and returns 
         its' number.
@@ -956,7 +963,7 @@ class IKPdb(bdb.Bdb):
             args = obj['args']
         
             if command == 'getBreakpoints':
-                breakpoints_list = self.get_breakpoints_list()
+                breakpoints_list = IKBreakpoint.get_breakpoints_list()
                 remote_client.reply(obj, breakpoints_list)
                 _logger.b_debug("getBreakpoints(%s) => %s", args, breakpoints_list)
                 
@@ -977,22 +984,17 @@ class IKPdb(bdb.Bdb):
                                 enabled,
                                 os.getcwd())
                 c_file_name = self.lookup_module(file_name)
-                r = self.set_breakpoint(c_file_name, 
-                                        line_number, 
-                                        cond=condition,
-                                        enabled=enabled)
+                err, bp_number = self.set_breakpoint(c_file_name, 
+                                                     line_number, 
+                                                     condition=condition,
+                                                     enabled=enabled)
                 error_messages = []
-                if r:
+                if err:
                     _logger.g_error("setBreakpoint error: %s", r)
-                    error_messages = [r]
+                    error_messages = [err]
                     result = {}
                     command_exec_status = 'error'
                 else:
-                    # get_breakpoint_number invoke lookup_module() so we don't need to do it
-                    # TODO: remove this comment when all breakpoint methods will
-                    # do the same
-                    bp_number = self.get_breakpoint_number(args['file_name'], args['line_number'])
-                    assert bp_number, "Internal error: uncaught setBreakpoint failure"
                     result = {'breakpoint_number': bp_number}
                     command_exec_status = 'ok'
                 remote_client.reply(obj, result, 
@@ -1030,6 +1032,7 @@ class IKPdb(bdb.Bdb):
                 _logger.b_debug("    command_exec_status => %s", command_exec_status)
 
             elif command == "clearBreakpoint":
+                _logger.b_debug("clearBreakpoint(%s)", args)
                 c_file_name = self.lookup_module(args['file_name'])
                 r = self.clear_break(c_file_name, args['line_number'])
                 result = {}
@@ -1043,7 +1046,6 @@ class IKPdb(bdb.Bdb):
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
                                     error_messages=error_messages)
-                _logger.b_debug("clearBreakpoint(%s)", args)
             
             elif command == "getProperties":
                 _logger.e_debug("getProperties(%s)", args)
@@ -1120,16 +1122,14 @@ class IKPdb(bdb.Bdb):
 
             if True:
                 _logger.b_debug("Current breakpoint list:")
-                if not bdb.Breakpoint.bplist:
+                if not IKBreakpoint.breakpoints_by_file_and_line:
                     _logger.b_debug("    <empty>") 
-                                        
-                for bl in bdb.Breakpoint.bplist:
-                    for bp in bdb.Breakpoint.bplist[bl]:
-                        _logger.b_debug("    %s => %s => number=%s, enabled=%s, condition=%s", 
-                                        bl, bp,
-                                        bp.number,
-                                        bp.enabled,
-                                        repr(bp.cond))
+                for file_line, bp in IKBreakpoint.breakpoints_by_file_and_line.items():
+                    _logger.b_debug("    %s => number=%s, enabled=%s, condition=%s", 
+                                    file_line,
+                                    bp.number,
+                                    bp.enabled,
+                                    repr(bp.condition))
 
         
 def set_trace():
@@ -1152,13 +1152,12 @@ def post_mortem(trace_back, exc_info=None):
     pm_traceback = trace_back
     while pm_traceback.tb_next:
         pm_traceback = pm_traceback.tb_next      
-    ikpdb.setup(None, pm_traceback)
     if exc_info:
         ikpdb._line_tracer(pm_traceback.tb_frame, post_mortem=exc_info)
     else:
         ikpdb._line_tracer(pm_traceback.tb_frame)
         
-    ikpdb.forget()
+    #ikpdb.forget()
     _logger.g_info("Post mortem debugger finished.")
 
 ##
@@ -1329,9 +1328,9 @@ def main():
         pm_traceback = sys.exc_info()[2]
         while pm_traceback.tb_next:
             pm_traceback = pm_traceback.tb_next      
-        ikpdb.setup(None, pm_traceback)
+        
         ikpdb._line_tracer(pm_traceback.tb_frame, post_mortem=sys.exc_info())
-        ikpdb.forget()
+        
         debugger_thread.join()
         try:
             remote_client.send('programEnd', 
