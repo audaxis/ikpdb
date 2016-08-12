@@ -742,6 +742,12 @@ class IKPdb():
         self.frame_return = None
         self.frame_suspend = True
         self.pending_stop = True
+        print "===========================setup_suspend() before enable tracing"
+        for thr in threading.enumerate():
+            a_frame = sys._current_frames()[thr.ident]
+            print "%s: %s => %s, %s" % (thr.name, thr.ident, a_frame, a_frame.f_trace )
+        print "==========================="
+        
         self.enable_tracing()
         return
 
@@ -813,7 +819,6 @@ class IKPdb():
         Note that we test 'step into' first to give a chance to 'stepOver' in
         case user click on 'stepInto' on a 'no call' line.
         """
-        print "======================== stop_here()"
         # TODO: Optimization => defines a set of modules / names where _tracer
         # is never registered. This will replace skip
         #if self.skip and self.is_skipped_module(frame.f_globals.get('__name__')):
@@ -897,7 +902,9 @@ class IKPdb():
         # - step into
         # - step out
         # then resume execution
+        print "=========waiting for _resume_command_q"
         resume_command = self._resume_command_q.get()
+        print "=========received resume_command=%s" % resume_command
         if resume_command == 'resume':
             self.setup_resume()
         elif resume_command == 'stepOver':
@@ -926,7 +933,14 @@ class IKPdb():
         :return: True if tracing has been enabled, False else.
         """
         # TODO: set trace function for all active threads
+        _logger.x_debug("enable_tracing()")
+        print "===========================enable_tracing()"
+        for thr in threading.enumerate():
+            a_frame = sys._current_frames()[thr.ident]
+            print "%s: %s => %s, %s" % (thr.name, thr.ident, a_frame, a_frame.f_trace )
+        print "===========================enable_tracing() end"
         if not self.tracing_enabled and self.execution_started:
+
             sys.settrace(self._tracer)  # Set trace function for current_thread
             threading.settrace(self._tracer)  # then all threads to come
             self.tracing_enabled = True
@@ -937,8 +951,15 @@ class IKPdb():
         else do nothing.
         :return: False if tracing has disabled, False else.
         """
+        _logger.x_debug("disable_tracing()")
+        print "===========================disable_tracing()"
+        for thr in threading.enumerate():
+            a_frame = sys._current_frames()[thr.ident]
+            print "%s: %s => %s, %s" % (thr.name, thr.ident, a_frame, a_frame.f_trace )
+        print "===========================disable_tracing() end"
         # TODO: remove trace function for all active threads
         if self.tracing_enabled and self.execution_started:
+
             sys.settrace(None)  # unet trace function for current_thread
             threading.settrace(None)  # then all threads to come
             self.tracing_enabled = False
