@@ -236,7 +236,12 @@ class IKPdbConnectionHandler():
             _logger.n_debug("Enter socket.recv(%s) with self._received_data = %s", 
                             self.SOCKET_BUFFER_SIZE, 
                             self._received_data)
-            data = self._connection.recv(self.SOCKET_BUFFER_SIZE)
+            try:
+                data = self._connection.recv(self.SOCKET_BUFFER_SIZE)
+            except socket.error as socket_err:
+                return {'command': 'quit', 
+                        'args':{'socket_error_number': socket_err.errno,
+                                'socket_error_str': socket_err.strerror}}
             _logger.n_debug("Socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
             self._received_data += data
                 
@@ -296,8 +301,7 @@ class IKBreakpoint:
     This class manages 3 lists of breakpoints:
      - `breakpoints_files` contains all breakpoints line numbers indexed by file_name
      - `breakpoints_by_file_and_line` contains all breakpoints indexed by (file, line)
-     - `
-    
+     - `breakpoints_by_number`is a zero based indexed list of all breakpoints.
     """
     breakpoints_files = {}  # list of lines indexed by __CANONICAL__ file names
     breakpoints_by_file_and_line = {}  # breakpoint indexed by (CANONICAL_file, line)
@@ -323,9 +327,27 @@ class IKBreakpoint:
         IKBreakpoint.breakpoints_by_number.append(self)
         IKBreakpoint.breakpoints_by_file_and_line[file_name, line_number] = self
         IKBreakpoint.breakpoints_files[file_name] = \
-            IKBreakpoint.breakpoints_files.get(file_name, [])+[file_name]
+            IKBreakpoint.breakpoints_files.get(file_name, [])+[line_number]
         if enabled:
             IKBreakpoint.any_active_breakpoint = True            
+
+    def clear(self):
+        """ Clear a breakpoint by removing it from all lists so that it is no
+        longer used.
+        """
+        del IKBreakpoint.breakpoints_by_file_and_line[self.file_name, self.line_number]
+        IKBreakpoint.breakpoints_by_number[self.number] = None
+        IKBreakpoint.breakpoints_files[self.file_name].remove(self.line_number)
+        if len(IKBreakpoint.breakpoints_files[self.file_name]) == 0:
+            del IKBreakpoint.breakpoints_files[self.file_name]
+        IKBreakpoint.update_active_breakpoint_flag()
+
+    @classmethod
+    def update_active_breakpoint_flag(cls):
+        """ Checks all breakpoints to find wether at least one is active and 
+        update `any_active_breakpoint` accordingly.
+        """
+        cls.any_active_breakpoint=any([bp.enabled for bp in cls.breakpoints_by_number if bp])
 
     @classmethod
     def lookup_effective_breakpoint(cls, file_name, line_number, frame):
@@ -358,7 +380,7 @@ class IKBreakpoint:
         must be done by clients (eg. inouk.ikpdb for Cloud9)
         """
         breakpoints_list = []
-        for bp in IKBreakpoint.breakpoints_by_number:
+        for bp in cls.breakpoints_by_number:
             if bp:  # breakpoint #0 exists and is always None
                 bp_dict = {
                     'breakpoint_number': bp.number,
@@ -370,11 +392,51 @@ class IKBreakpoint:
                 breakpoints_list.append(bp_dict)
         return breakpoints_list
 
-    
+    @classmethod
+    def disable_all_breakpoints(cls):
+        """Disable all breakpoints and udate `active_breakpoint_flag'.
+        """
+        for bp in cls.breakpoints_by_number:
+            if bp:  # breakpoint #0 exists and is always None
+                bp.enabled = False
+        cls.update_active_breakpoint_flag()
+        return
+
+    @classmethod
+    def backup_breakpoints_state(cls):
+        """ Returns the state of all breakpoints in a list that can be used
+        later to restore all breakpoints state"""
+        all_breakpoints_state = []
+        for bp in cls.breakpoints_by_number:
+            if bp: 
+                all_breakpoints_state.append((bp.number, 
+                                              bp.enabled, 
+                                              bp.condition,))
+        return all_breakpoints_state
+
+    @classmethod
+    def restore_breakpoints_state(cls, breakpoints_state_list):
+        """Restore the state of breakpoints given a list provided by 
+        backup_breakpoints_state(). If breakpoint list has changed since backup
+        missing or added breakpoints are ignored.
+        
+        breakpoints_state_list is a list of tuple. Each tuple is of form:
+        (breakpoint_number, enabled, condition)
+        """
+        for breakpoint_state in breakpoints_state_list:
+            bp = cls.breakpoints_by_number[breakpoint_state[0]]
+            if bp:
+                bp.enabled = breakpoint_state[1]
+                bp.condition = breakpoint_state[2]
+        cls.update_active_breakpoint_flag()
+        return
+
 class IKPdb():
     
     def __init__(self, skip=None, launch_working_directory=None):
         self.skip = set(skip) if skip else None
+        # TODO: manage skip
+        
         self.file_name_cache = {}        
         
         self._CWD = launch_working_directory or os.getcwd()
@@ -382,15 +444,19 @@ class IKPdb():
         self._active_breakpoint_lock = threading.Lock()
         self._active_thread_lock = threading.Lock()
         self._resume_command_q = Queue.Queue(maxsize=1)
-        # TODO: manage skip
+
+        # tracing is disabled until required 
+        self.execution_started = False
+        self.tracing_enabled = False
 
         # stop management
         self.pending_stop = False
         self.frame_stop = None
         self.frame_calling = None
         self.frame_return = None
-
-        # to dump only program frames        
+        self.frame_suspend = False  # If true, debugger will stop at next frame
+        
+        # last frame to dump ; allows to dump only program frames         
         self.frame_beginning = None
         
         # If True, debugger breaks on first line to allow user to setup 
@@ -579,11 +645,11 @@ class IKPdb():
         """ evaluate 'expression' in the context of the frame identified by
         'frame_id' or globally.
         Breakpoints are disabled depending on 'disable_break' value.
-        Retursn a tuple of value and type both as str.
+        Returnsprint a tuple of value and type both as str.
         """
         if disable_break:
-            breakpoints_backup = self.backup_breakpoints_state()
-            self.disable_all_breakpoints()
+            breakpoints_backup = IKBreakpoint.backup_breakpoints_state()
+            IKBreakpoint.disable_all_breakpoints()
 
         if frame_id and not global_context:
             eval_frame = ctypes.cast(frame_id, ctypes.py_object).value
@@ -626,7 +692,7 @@ class IKPdb():
             result_value = "%s: %s" % (result_type, result,)
 
         if disable_break:
-            self.restore_breakpoints_state(breakpoints_backup)
+            IKBreakpoint.restore_breakpoints_state(breakpoints_backup)
 
         _logger.e_debug("evaluate(%s) => value = %s:%s | %s", expression, result_value, result_type, result)
         return result_value, result_type
@@ -638,6 +704,7 @@ class IKPdb():
         self.frame_calling = None
         self.frame_stop = frame
         self.frame_return = frame.f_back
+        self.frame_suspend = False
         self.pending_stop = True 
         return
 
@@ -648,6 +715,7 @@ class IKPdb():
         self.frame_calling = frame
         self.frame_stop = frame
         self.frame_return = None
+        self.frame_suspend = False
         self.pending_stop = True 
         return
 
@@ -658,7 +726,23 @@ class IKPdb():
         self.frame_calling = None
         self.frame_stop = None
         self.frame_return = frame.f_back
+        self.frame_suspend = False
         self.pending_stop = True 
+        return
+
+    def setup_suspend(self):
+        """Setup debugger to "suspend" execution
+        """
+        # if tracing is not active:
+            # activate tracing
+        #else:
+        self.quitting = False
+        self.frame_calling = None
+        self.frame_stop = None
+        self.frame_return = None
+        self.frame_suspend = True
+        self.pending_stop = True
+        self.enable_tracing()
         return
 
     def setup_resume(self):
@@ -668,33 +752,24 @@ class IKPdb():
         self.frame_calling = None
         self.frame_stop = None
         self.frame_return = None
+        self.frame_suspend = False
         self.pending_stop = IKBreakpoint.any_active_breakpoint
-        # TODO: Remove trace function everywhere and reinstall it if a breakpoint is SET
+        if not self.pending_stop:
+            self.disable_tracing()
         return
 
-    def set_trace(self, frame=None):
-        """Start debugging from "frame".
-        If frame is not specified, debugging starts from caller's frame.
-        """
-        if frame is None:
-            frame = sys._getframe().f_back
-        self._line_tracer(frame)
-
     def reset(self):
-        """ Resets debugger status and set it to run
+        """ Resets debugger status and set it to run.
         """
-        print "===============================================reset()"
         import linecache
         linecache.checkcache()
         self.frame_beginning = None
         self.setup_resume()
 
-
-
     def _tracer(self, frame, event, arg):
-        print "========> _tracer()"
+        #print "========> _tracer()"
         if event == 'line':
-            print "============> event 'line'"
+            #print "============> event 'line'"
             if not self.pending_stop:
                 return self._tracer                
             if self.should_stop_here(frame) or self.should_break_here(frame):
@@ -704,7 +779,7 @@ class IKPdb():
             return self._tracer
         
         if event == 'call':
-            print "============> event 'call'"
+            print "============> event 'call' with frame=%s" % (inspect.getframeinfo(frame),)
             if self.frame_beginning is None:  
                 # First call of dispatch since reset()
                 self.frame_beginning = frame.f_back
@@ -753,8 +828,11 @@ class IKPdb():
         # step out
         if frame==self.frame_return:  # frame cannot be null
             return True
+        # suspend
+        if self.frame_suspend:
+            return True
+        
         return False
-
 
     def should_break_here(self, frame):
         """ Check if there is a breakpoint at this frame or not.
@@ -769,7 +847,6 @@ class IKPdb():
                                                       frame.f_lineno, 
                                                       frame)
         return True if bp else False
-
 
     def _line_tracer(self, frame, post_mortem=False):
         """This function is called when debugger has decided that we must
@@ -834,7 +911,39 @@ class IKPdb():
             
         self._active_breakpoint_lock.release()
         return
-        
+
+    def set_trace(self, frame=None):
+        """Start debugging from "frame".
+        If frame is not specified, debugging starts from caller's frame.
+        """
+        if frame is None:
+            frame = sys._getframe().f_back
+        self._line_tracer(frame)
+
+    def enable_tracing(self):
+        """ Enable tracing if it disabled and debugged program is running, else
+        do nothing.
+        :return: True if tracing has been enabled, False else.
+        """
+        # TODO: set trace function for all active threads
+        if not self.tracing_enabled and self.execution_started:
+            sys.settrace(self._tracer)  # Set trace function for current_thread
+            threading.settrace(self._tracer)  # then all threads to come
+            self.tracing_enabled = True
+        return self.tracing_enabled
+
+    def disable_tracing(self):
+        """ Disable tracing if it is disabled and debugged program is running, 
+        else do nothing.
+        :return: False if tracing has disabled, False else.
+        """
+        # TODO: remove trace function for all active threads
+        if self.tracing_enabled and self.execution_started:
+            sys.settrace(None)  # unet trace function for current_thread
+            threading.settrace(None)  # then all threads to come
+            self.tracing_enabled = False
+        return self.tracing_enabled
+
     def set_breakpoint(self, file_name, line_number, condition=None, enabled=True):
         """ Create a breakpoint, register it in the class's lists and returns
         a tuple of (error_message, break_number)
@@ -846,66 +955,59 @@ class IKPdb():
             return 'Line %s:%d does not exist' % (c_file_name, line_number), None
         bp = IKBreakpoint(c_file_name, line_number, condition, enabled)
         self.pending_stop = IKBreakpoint.any_active_breakpoint
+        if self.pending_stop:
+            self.enable_tracing()
+        else:
+            self.disable_tracing()
         return None, bp.number
 
-    def get_breakpoint_number(self, filename, line):
-        """lookup breakpoint by filename and line number and returns 
-        its' number.
-        """
-        cfile = self.lookup_module(filename)
-        for bp in bdb.Breakpoint.bpbynumber:
-            if bp and bp.file == cfile and bp.line == line:
-                return bp.number
-        return 0
-
     def change_breakpoint_state(self, bp_number, enabled, condition=None):
-        """ enable or disable a breakpoint identified by it's 
-            breakpoint number.
+        """ Change breakpoint status or `condition` expression. 
+            :param bp_number: number of breakpoint to change 
             :returns: None or an error message (string)
         """
-        if not (0 <= bp_number < len(bdb.Breakpoint.bpbynumber)):
-            return "Found no breakpoint numbered %s" % bp_number
-        bp = bdb.Breakpoint.bpbynumber[bp_number]
+        if not (0 <= bp_number < len(IKBreakpoint.breakpoints_by_number)):
+            return "Found no breakpoint numbered: %s" % bp_number
+        bp = IKBreakpoint.breakpoints_by_number[bp_number]
         if not bp:
             return "Found no breakpoint numbered %s" % bp_number
-        _logger.b_debug("    change_breakpoint_state(bp_number=%s, enabled=%s, condition=%s) found %s", 
+        _logger.b_debug("    change_breakpoint_state(bp_number=%s, enabled=%s, "
+                        "condition=%s) found %s", 
                         bp_number,
                         enabled,
                         repr(condition),
                         bp)
-        if bp:
-            bp.enabled = enabled
-            # update condition for conditional breakpoints
-            bp.cond = condition
+        bp.enabled = enabled
+        bp.condition = condition  # update condition for conditional breakpoints
+        IKBreakpoint.update_active_breakpoint_flag()  # force flag refresh
+        self.pending_stop = IKBreakpoint.any_active_breakpoint
+        if self.pending_stop:
+            self.enable_tracing()
+        else:
+            self.disable_tracing()
         return None
 
-    def backup_breakpoints_state(self):
-        """Returns the state of all breakpoints"""
-        all_breakpoints_state = []
-        for breakpoint in bdb.Breakpoint.bpbynumber:
-            if breakpoint:  # breakpoint #0 exists and is always None
-                all_breakpoints_state.append((breakpoint.number, 
-                                              breakpoint.enabled, 
-                                              breakpoint.cond,))
-        return all_breakpoints_state
-
-    def restore_breakpoints_state(self, breakpoints_state_list):
-        """Restore the state of breakpoints given a list.
-        breakpoints_state_list is a list of tuple. Each tuple is of form:
-        (breakpoint_number, enabled,)
+    def clear_breakpoint(self, breakpoint_number):
+        """ Delete a breakpoint identidied by it's number. 
+        :param breakpoint_number:  index of breakpoint to delete
+        :type breakpoint_number: int
+        :return: an error message or None
         """
-        for breakpoint_state in breakpoints_state_list:
-            self.change_breakpoint_state(breakpoint_state[0],
-                                         breakpoint_state[1],
-                                         breakpoint_state[2])
-        return
-
-    def disable_all_breakpoints(self):
-        """Disable all breakpointss"""
-        for breakpoint in bdb.Breakpoint.bpbynumber:
-            if breakpoint:  # breakpoint #0 exists and is always None
-                breakpoint.enabled = False
-        return
+        if not (0 <= breakpoint_number < len(IKBreakpoint.breakpoints_by_number)):
+            return "Found no breakpoint numbered %s" % breakpoint_number
+        bp = IKBreakpoint.breakpoints_by_number[breakpoint_number]
+        if not bp:
+            return "Found no breakpoint numbered: %s" % breakpoint_number
+        _logger.b_debug("    clear_breakpoint(breakpoint_number=%s) found: %s",
+                        breakpoint_number,
+                        bp)
+        bp.clear()
+        self.pending_stop = IKBreakpoint.any_active_breakpoint         
+        if self.pending_stop:
+            self.enable_tracing()
+        else:
+            self.disable_tracing()
+        return None
 
     def run(self, cmd, globals=None, locals=None):
         """ Overloaded to debug multithreaded programs"""
@@ -915,22 +1017,20 @@ class IKPdb():
         if locals is None:
             locals = globals
         self.reset()
-        sys.settrace(self._tracer)  # Set trace function for current_thread
-        threading.settrace(self._tracer)  # then all threads to come
+        self.execution_started = True
+        if self.pending_stop:
+            self.enable_tracing()
+        #sys.settrace(self._tracer)  # Set trace function for current_thread
+        #threading.settrace(self._tracer)  # then all threads to come
         if not isinstance(cmd, types.CodeType):
             cmd = cmd + '\n'
         try:
             exec cmd in globals, locals
-        except bdb.BdbQuit:
+        except IKPdbQuit:
             pass
         finally:
             self.quitting = 1
-            
-            # Remove trace function in current thread and all threads to come
-            sys.settrace(None)
-            threading.settrace(None)
-            
-            # TODO: remove trace function for all active threads
+            self.disable_tracing()
 
     def _runscript(self, filename):
         # The script has to run in __main__ namespace (or imports from
@@ -954,13 +1054,14 @@ class IKPdb():
         self._user_requested_quit = 0
         statement = 'execfile(%r)' % filename
         self.run(statement)
+        
     def command_loop(self, run_script_event, post_mortem=False):
         """ return 1 to exit command_loop and resume execution 
         """
         while True:
             obj = remote_client.receive()
             command = obj["command"]  # TODO: ensure we always have a command if receive returns
-            args = obj['args']
+            args = obj.get('args', {})
         
             if command == 'getBreakpoints':
                 breakpoints_list = IKBreakpoint.get_breakpoints_list()
@@ -1007,25 +1108,25 @@ class IKPdb():
                 #  - set or remove condition
                 _logger.b_debug("changeBreakpointState(%s)", args)
                 bp_number = args.get('breakpoint_number', None)
-                if bp_number:
-                    r = self.change_breakpoint_state(bp_number,
-                                                     args.get('enabled', False), 
-                                                     condition=args.get('condition', ''))
-                    result = {}
-                    error_messages = []
-                    if r:
-                        msg = "changeBreakpointState() error: \"%s\"" % r
-                        _logger.g_error("    "+msg)
-                        error_messages = [msg]
-                        command_exec_status = 'error'
-                    else:
-                        command_exec_status = 'ok'
-                else:
+                if bp_number is None:
                     result = {}
                     msg = "changeBreakpointState() error: missing required breakpointNumber parameter."
                     _logger.g_error("    "+msg)
                     error_messages = [msg]
                     command_exec_status = 'error'
+                else:
+                    err = self.change_breakpoint_state(bp_number,
+                                                       args.get('enabled', False), 
+                                                       condition=args.get('condition', ''))
+                    result = {}
+                    error_messages = []
+                    if err:
+                        msg = "changeBreakpointState() error: \"%s\"" % err
+                        _logger.g_error("    "+msg)
+                        error_messages = [msg]
+                        command_exec_status = 'error'
+                    else:
+                        command_exec_status = 'ok'
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
                                     error_messages=error_messages)
@@ -1033,16 +1134,24 @@ class IKPdb():
 
             elif command == "clearBreakpoint":
                 _logger.b_debug("clearBreakpoint(%s)", args)
-                c_file_name = self.lookup_module(args['file_name'])
-                r = self.clear_break(c_file_name, args['line_number'])
-                result = {}
-                error_messages = []
-                if r:
-                    _logger.g_error("clearBreakpoint error: %s", r)
-                    error_messages = [r]
+                bp_number = args.get('breakpoint_number', None)
+                if bp_number is None:
+                    result = {}
+                    msg = "clearBreakpointState() error: missing required breakpointNumber parameter."
+                    _logger.g_error("    "+msg)
+                    error_messages = [msg]
                     command_exec_status = 'error'
                 else:
-                    command_exec_status = 'ok'
+                    err = self.clear_breakpoint(args['breakpoint_number'])
+                    result = {}
+                    error_messages = []
+                    if err:
+                        msg = "clearBreakpoint() error: \"%s\"" % err
+                        _logger.g_error("    "+msg)
+                        error_messages = [msg]
+                        command_exec_status = 'error'
+                    else:
+                        command_exec_status = 'ok'
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
                                     error_messages=error_messages)
@@ -1090,6 +1199,13 @@ class IKPdb():
                 run_script_event.set()
                 remote_client.reply(obj, {'executionStatus': 'running'})
 
+            elif command == 'suspend':
+                _logger.x_debug("suspend(%s)", args)
+                self.setup_suspend()
+                # We return a running status which is True at that point. Next 
+                # programBreak will change status to 'stopped'
+                remote_client.reply(obj, {'executionStatus': 'running'})
+                
             elif command == 'resume':
                 _logger.x_debug("resume(%s)", args)
                 remote_client.reply(obj, {'executionStatus': 'running'})
@@ -1116,20 +1232,29 @@ class IKPdb():
                 value, result_type = self.evaluate(args['frame'], args['expression'], args['global'], disable_break=args['disableBreak'])
                 remote_client.reply(obj, {'value': value, 'type': result_type})  # result
 
+            elif command == 'quit':
+                _logger.e_debug("quit(%s)", args)
+                return
+            
             else:
                 _logger.g_critical("Unsupported command '%s' ignored.", command)
                 #return
 
             if True:
-                _logger.b_debug("Current breakpoint list:")
+                _logger.b_debug("Current breakpoints list [any_active_breakpoint=%s]:", IKBreakpoint.any_active_breakpoint) 
+                _logger.b_debug("    IKBreakpoint.breakpoints_by_file_and_line:")
                 if not IKBreakpoint.breakpoints_by_file_and_line:
-                    _logger.b_debug("    <empty>") 
+                    _logger.b_debug("        <empty>") 
                 for file_line, bp in IKBreakpoint.breakpoints_by_file_and_line.items():
-                    _logger.b_debug("    %s => number=%s, enabled=%s, condition=%s", 
+                    _logger.b_debug("        %s => number=%s, enabled=%s, condition=%s", 
                                     file_line,
                                     bp.number,
                                     bp.enabled,
                                     repr(bp.condition))
+                _logger.b_debug("    IKBreakpoint.breakpoints_files = %s", 
+                                IKBreakpoint.breakpoints_files)
+                _logger.b_debug("    IKBreakpoint.breakpoints_by_number = %s", 
+                                IKBreakpoint.breakpoints_by_number)
 
         
 def set_trace():
@@ -1286,11 +1411,8 @@ def main():
         debugger_thread = threading.Thread(target=ikpdb.command_loop, args=(run_script_event,))
         
         debugger_thread.start()
-
-        run_script_event.wait() 
-        print "=====================entering _runscript()"
+        run_script_event.wait()  # Wait for client to run script
         ikpdb._runscript(mainpyfile)
-        print "=====================exited _runscript()"
         debugger_thread.join()
         remote_client.send('programEnd', 
                            result={'exit_code': None, 
@@ -1331,7 +1453,6 @@ def main():
         
         ikpdb._line_tracer(pm_traceback.tb_frame, post_mortem=sys.exc_info())
         
-        debugger_thread.join()
         try:
             remote_client.send('programEnd', 
                                result={'exit_code': None, 
@@ -1342,6 +1463,7 @@ def main():
         
         _logger.g_info("Post mortem debugger finished.")
         close_connection()
+        debugger_thread.join()
         sys.exit(1)
 
 
