@@ -16,6 +16,7 @@ import types, ctypes
 import argparse
 import datetime
 import cStringIO
+import ctypes
 
 # For now ikpdb is a singleton
 ikpdb = None 
@@ -294,6 +295,31 @@ def IKPdbRepr(t):
         return t.__class__.__name__
     t_type = type(t)
     return str(t_type).split(' ')[1][1:-2]
+
+PY_TRACEFUNC = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.py_object, ctypes.py_object, ctypes.c_int, ctypes.py_object)        
+class PyThreadState(ctypes.Structure):
+    _fields_ = [("next",                ctypes.POINTER(ctypes.c_int)),
+                ("interp",              ctypes.POINTER(ctypes.c_int)),
+                ('frame',               ctypes.py_object),
+                ('recursion_depth',     ctypes.c_int),
+                ('tracing',             ctypes.c_int),
+                ('use_tracing',         ctypes.c_int),
+                ('c_profilefunc',       PY_TRACEFUNC),
+                ('c_tracefunc',         PY_TRACEFUNC),
+                ('c_profileobj',        ctypes.py_object),
+                ('c_traceobj',          ctypes.py_object),
+                ('curexc_type',         ctypes.py_object),
+                ('curexc_value',        ctypes.py_object),
+                ('curexc_traceback',    ctypes.py_object),
+                ('exc_type',            ctypes.py_object),
+                ('exc_value',           ctypes.py_object),
+                ('exc_traceback',       ctypes.py_object),
+                ('dict',                ctypes.py_object),
+                ('tick_counter',        ctypes.c_int),
+                ('gilstate_counter',    ctypes.c_int),
+                ('async_exc',           ctypes.py_object),
+                ('thread_id',           ctypes.c_long)
+                ]
         
 class IKBreakpoint:
     """Breakpoints manager.
@@ -437,6 +463,7 @@ class IKPdb():
         self.skip = set(skip) if skip else None
         # TODO: manage skip
         
+        self.debugger_thread_ident = None
         self.file_name_cache = {}        
         
         self._CWD = launch_working_directory or os.getcwd()
@@ -736,18 +763,13 @@ class IKPdb():
         # if tracing is not active:
             # activate tracing
         #else:
+        print "===========================Entering setup_suspend()"
         self.quitting = False
         self.frame_calling = None
         self.frame_stop = None
         self.frame_return = None
         self.frame_suspend = True
         self.pending_stop = True
-        print "===========================setup_suspend() before enable tracing"
-        for thr in threading.enumerate():
-            a_frame = sys._current_frames()[thr.ident]
-            print "%s: %s => %s, %s" % (thr.name, thr.ident, a_frame, a_frame.f_trace )
-        print "==========================="
-        
         self.enable_tracing()
         return
 
@@ -772,47 +794,6 @@ class IKPdb():
         self.frame_beginning = None
         self.setup_resume()
 
-    def _tracer(self, frame, event, arg):
-        #print "========> _tracer()"
-        if event == 'line':
-            #print "============> event 'line'"
-            if not self.pending_stop:
-                return self._tracer                
-            if self.should_stop_here(frame) or self.should_break_here(frame):
-                self._line_tracer(frame)
-                if self.quitting: 
-                    raise IKPdbQuit
-            return self._tracer
-        
-        if event == 'call':
-            print "============> event 'call' with frame=%s" % (inspect.getframeinfo(frame),)
-            if self.frame_beginning is None:  
-                # First call of dispatch since reset()
-                self.frame_beginning = frame.f_back
-            return self._tracer
-            
-        if event == 'return':
-            # We may use this event to process retur value or frame
-            # Meanwhile we return None as return value is ignored
-            return None
-            #return self.dispatch_return(frame, arg)
-            
-        if event == 'exception':
-            # TODO: Implement exception handling
-            #self.user_exception(frame, arg)
-            #if self.quitting: 
-            #    raise IKPdbQuit
-            return self._tracer
-            
-        if event == 'c_call':
-            return self._tracer
-        if event == 'c_exception':
-            return self._tracer
-        if event == 'c_return':
-            return self._tracer
-        print "IKPdb _tracer(): unknown debugging event:", repr(event)
-        return self._tracer
-
     def should_stop_here(self, frame):
         """ Called by dispatch function to check wether debugger must stop at
         this frame.
@@ -835,7 +816,20 @@ class IKPdb():
             return True
         # suspend
         if self.frame_suspend:
-            return True
+            print "======== can we suspend"
+            if False:
+                _logger.g_debug("%s, frame=%s, frame.f_code.co_filename=%s:lineno=%s",
+                                 threading.currentThread().name,
+                                 hex(id(frame)),
+                                 frame.f_code.co_filename,
+                                 frame.f_lineno)
+            
+            if threading.current_thread().ident != self.debugger_thread_ident:
+                print "======== suspend activated"
+                return True
+            else:
+                pass
+            #frame.f_code.co_filename.startswith(self._CWD):
         
         return False
 
@@ -919,6 +913,59 @@ class IKPdb():
         self._active_breakpoint_lock.release()
         return
 
+    def _tracer(self, frame, event, arg):
+        if event == 'line':
+            #print "============> event 'line'"
+            if not self.pending_stop:
+                return self._tracer                
+            
+            #print "========> _tracer(event=%s, frame=%s, arg=%s) " % (event, frame, arg)
+            if self.should_stop_here(frame) or self.should_break_here(frame):
+                self._line_tracer(frame)
+                if self.quitting: 
+                    raise IKPdbQuit
+            return self._tracer
+        
+        if event == 'call':
+            #print "========> _tracer(event=%s, frame=%s, arg=%s) " % (event, frame, arg)
+            if self.frame_beginning is None:  
+                # First call of dispatch since reset()
+                self.frame_beginning = frame.f_back
+                # limited tracing of current thread has been enabled to allow
+                # self.frame_beginning to be set. 
+                # Now we set tracing globaly or disable it completely
+                # or remove tracer.
+                # we don't use enable_tracing() since this is the first and only
+                # thread to trace().
+                if self.pending_stop:
+                    threading.settrace(self._tracer)  # trace all threads to come
+                    self.tracing_enabled = True
+                else:
+                    sys.settrace(None)  
+            return self._tracer
+            
+        if event == 'return':
+            # We may use this event to process retur value or frame
+            # Meanwhile we return None as return value is ignored
+            return None
+            #return self.dispatch_return(frame, arg)
+            
+        if event == 'exception':
+            # TODO: Implement exception handling
+            #self.user_exception(frame, arg)
+            #if self.quitting: 
+            #    raise IKPdbQuit
+            return self._tracer
+            
+        if event == 'c_call':
+            return self._tracer
+        if event == 'c_exception':
+            return self._tracer
+        if event == 'c_return':
+            return self._tracer
+        print "IKPdb _tracer(): unknown debugging event:", repr(event)
+        return self._tracer
+
     def set_trace(self, frame=None):
         """Start debugging from "frame".
         If frame is not specified, debugging starts from caller's frame.
@@ -927,6 +974,87 @@ class IKPdb():
             frame = sys._getframe().f_back
         self._line_tracer(frame)
 
+
+    def dump_tracing_state(self, context):
+        print "Dumping all threads Tracing state: (%s)" % context
+        print "    self.tracing_enabled=%s" % self.tracing_enabled
+        print "    self.execution_started=%s" % self.execution_started
+        print "    self.frame_beginning=%s" % self.frame_beginning
+        print "    self.debugger_thread_ident=%s" % self.debugger_thread_ident
+        for thr in threading.enumerate():
+            is_current_thread = thr.ident == threading.current_thread().ident
+            print "    Thread: %s, %s %s" % (thr.name, thr.ident, "<= Current*" if is_current_thread else '')
+            a_frame = sys._current_frames()[thr.ident]
+            while a_frame:
+                flags = []
+                if a_frame == self.frame_beginning:
+                    flags.append("beginning")
+                if a_frame == inspect.currentframe():
+                    flags.append("current")
+                if flags:
+                    flags_str = "**"+",".join(flags)
+                else:
+                    flags_str = ""
+                print "        => %s, %s:%s(%s) | %s %s" % (a_frame, 
+                                                            a_frame.f_code.co_filename, 
+                                                            a_frame.f_lineno,
+                                                            a_frame.f_code.co_name, 
+                                                            a_frame.f_trace,
+                                                            flags_str)
+                a_frame = a_frame.f_back
+
+    # 
+    # setting => tracer
+    # func => trace_function
+    # t_p[0] => a_thread
+    def settrace_extended(self, thread_to_trace, tracer):
+        """ Allow to define the trace function on a given thread.
+        Be aware that this method don't do any check on parameters and requested
+        operation.
+        """
+        empty_obj = ctypes.py_object()
+        if tracer:
+            trace_function = PY_TRACEFUNC(tracer)
+            trace_object = self
+        else:
+            trace_function = ctypes.cast(None, PY_TRACEFUNC)
+            trace_object = empty_obj
+
+        interpreter = ctypes.pythonapi.PyInterpreterState_Head()
+        
+        threads_state_looper = ctypes.pythonapi.PyInterpreterState_ThreadHead(interpreter)
+        print "========================    threads_state_looper=%s" % threads_state_looper
+        while threads_state_looper:
+            a_thread_state_pointer = ctypes.cast(threads_state_looper, ctypes.POINTER(PyThreadState))
+            a_thread_state = a_thread_state_pointer[0]
+            print "========================        a_thread_state=%s" % a_thread_state
+            print "========================            a_thread_state.thread_id=%s" % a_thread_state.thread_id
+            print "========================            a_thread_state.use_tracing=%s" % a_thread_state.use_tracing
+            print "========================            a_thread_state.c_tracefunc=%s" % a_thread_state.c_tracefunc
+            print "========================            a_thread_state.c_profilefunc=%s" % a_thread_state.c_profilefunc
+            print "========================            dir(a_thread_state)=%s" % dir(a_thread_state)
+            if a_thread_state.thread_id == thread_to_trace.ident:  
+                try:
+                    print "========================            a_thread_state.c_traceobj=%s" % a_thread_state.c_traceobj
+                    temp = a_thread_state.c_traceobj
+                except ValueError:
+                    print "========================            a_thread_state.c_traceobj    !!! ValueError"
+                    temp = None
+                    
+                if trace_object != empty_obj: #Py_XINCREF
+                    refcount = ctypes.c_long.from_address(id(trace_object))
+                    refcount.value += 1
+                
+                if temp is not None: #Py_XDECREF
+                    refcount = ctypes.c_long.from_address(id(temp))
+                    refcount.value -= 1 #don't need to dealloc since we have a ref in here and it'll always be >0
+                
+                a_thread_state.c_tracefunc = trace_function
+                a_thread_state.c_traceobj  = trace_object
+                a_thread_state.use_tracing = 1 if trace_function or a_thread_state.c_profilefunc else 0
+            
+            threads_state_looper = ctypes.pythonapi.PyThreadState_Next(threads_state_looper)
+        
     def enable_tracing(self):
         """ Enable tracing if it disabled and debugged program is running, else
         do nothing.
@@ -934,16 +1062,25 @@ class IKPdb():
         """
         # TODO: set trace function for all active threads
         _logger.x_debug("enable_tracing()")
-        print "===========================enable_tracing()"
-        for thr in threading.enumerate():
-            a_frame = sys._current_frames()[thr.ident]
-            print "%s: %s => %s, %s" % (thr.name, thr.ident, a_frame, a_frame.f_trace )
-        print "===========================enable_tracing() end"
+        self.dump_tracing_state("before enable_tracing()")
         if not self.tracing_enabled and self.execution_started:
-
-            sys.settrace(self._tracer)  # Set trace function for current_thread
+            for thr in threading.enumerate():
+                
+                # We don't trace debugger command loop
+                if thr.ident != self.debugger_thread_ident:
+                    a_frame = sys._current_frames()[thr.ident]
+                    while a_frame:
+                        # don't trace above frame beginning
+                        #if a_frame.f_back and a_frame.f_back == self.frame_beginning:
+                        #    break
+                        a_frame.f_trace = self._tracer
+                        a_frame = a_frame.f_back
+                    # activate trace on this thread
+                    self.settrace_extended(thr, self._tracer)
             threading.settrace(self._tracer)  # then all threads to come
             self.tracing_enabled = True
+            
+        self.dump_tracing_state("after enable_tracing()")
         return self.tracing_enabled
 
     def disable_tracing(self):
@@ -952,14 +1089,8 @@ class IKPdb():
         :return: False if tracing has disabled, False else.
         """
         _logger.x_debug("disable_tracing()")
-        print "===========================disable_tracing()"
-        for thr in threading.enumerate():
-            a_frame = sys._current_frames()[thr.ident]
-            print "%s: %s => %s, %s" % (thr.name, thr.ident, a_frame, a_frame.f_trace )
-        print "===========================disable_tracing() end"
-        # TODO: remove trace function for all active threads
+        self.dump_tracing_state("before disable_tracing()")
         if self.tracing_enabled and self.execution_started:
-
             sys.settrace(None)  # unet trace function for current_thread
             threading.settrace(None)  # then all threads to come
             self.tracing_enabled = False
@@ -1039,10 +1170,12 @@ class IKPdb():
             locals = globals
         self.reset()
         self.execution_started = True
-        if self.pending_stop:
-            self.enable_tracing()
-        #sys.settrace(self._tracer)  # Set trace function for current_thread
-        #threading.settrace(self._tracer)  # then all threads to come
+        #self.enable_tracing()
+        
+        # Set trace function for current_thread only to allow 
+        # self.frame_beginning to be set.
+        sys.settrace(self._tracer)  
+
         if not isinstance(cmd, types.CodeType):
             cmd = cmd + '\n'
         try:
@@ -1429,9 +1562,12 @@ def main():
         ikpdb.mainpyfile = mainpyfile
         
         run_script_event = threading.Event()
-        debugger_thread = threading.Thread(target=ikpdb.command_loop, args=(run_script_event,))
+        debugger_thread = threading.Thread(target=ikpdb.command_loop,
+                                           name='IKPdbCommandLoop',
+                                           args=(run_script_event,))
         
         debugger_thread.start()
+        ikpdb.debugger_thread_ident = debugger_thread.ident
         run_script_event.wait()  # Wait for client to run script
         ikpdb._runscript(mainpyfile)
         debugger_thread.join()
