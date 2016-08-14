@@ -816,8 +816,8 @@ class IKPdb():
             return True
         # suspend
         if self.frame_suspend:
-            print "======== can we suspend"
-            if False:
+            #print "======== can we suspend"
+            if True:
                 _logger.g_debug("%s, frame=%s, frame.f_code.co_filename=%s:lineno=%s",
                                  threading.currentThread().name,
                                  hex(id(frame)),
@@ -828,6 +828,7 @@ class IKPdb():
                 print "======== suspend activated"
                 return True
             else:
+                print threading.current_thread().ident, self.debugger_thread_ident
                 pass
             #frame.f_code.co_filename.startswith(self._CWD):
         
@@ -938,9 +939,11 @@ class IKPdb():
                 # we don't use enable_tracing() since this is the first and only
                 # thread to trace().
                 if self.pending_stop:
+                    self.settrace_extended(None, self._tracer)
                     threading.settrace(self._tracer)  # trace all threads to come
                     self.tracing_enabled = True
                 else:
+                    #pass TO remove
                     sys.settrace(None)  
             return self._tracer
             
@@ -1008,7 +1011,7 @@ class IKPdb():
     # func => trace_function
     # t_p[0] => a_thread
     def settrace_extended(self, thread_to_trace, tracer):
-        """ Allow to define the trace function on a given thread.
+        """ Allows to define the trace function on a given thread.
         Be aware that this method don't do any check on parameters and requested
         operation.
         """
@@ -1016,6 +1019,7 @@ class IKPdb():
         if tracer:
             trace_function = PY_TRACEFUNC(tracer)
             trace_object = self
+            
         else:
             trace_function = ctypes.cast(None, PY_TRACEFUNC)
             trace_object = empty_obj
@@ -1033,24 +1037,46 @@ class IKPdb():
             print "========================            a_thread_state.c_tracefunc=%s" % a_thread_state.c_tracefunc
             print "========================            a_thread_state.c_profilefunc=%s" % a_thread_state.c_profilefunc
             print "========================            dir(a_thread_state)=%s" % dir(a_thread_state)
-            if a_thread_state.thread_id == thread_to_trace.ident:  
+            print "========================            trace_object=%s" % trace_object
+            print "========================            empty_obj=%s" % empty_obj
+            try:
+                old_c_traceobj = a_thread_state.c_traceobj
+                print "========================            a_thread_state.c_traceobj=%s" % old_c_traceobj
+            except ValueError:
+                print "========================            a_thread_state.c_traceobj    !!! ValueError"
+            print "\n\n"
+            
+            if thread_to_trace and a_thread_state.thread_id == thread_to_trace.ident:  
                 try:
-                    print "========================            a_thread_state.c_traceobj=%s" % a_thread_state.c_traceobj
-                    temp = a_thread_state.c_traceobj
+                    old_c_traceobj = a_thread_state.c_traceobj
+                    print "========================            a_thread_state.c_traceobj=%s" % old_c_traceobj
                 except ValueError:
                     print "========================            a_thread_state.c_traceobj    !!! ValueError"
-                    temp = None
+                    old_c_traceobj = None
                     
-                if trace_object != empty_obj: #Py_XINCREF
+                # Py_XINCREF on trace_object
+                if trace_object != empty_obj: 
                     refcount = ctypes.c_long.from_address(id(trace_object))
                     refcount.value += 1
                 
-                if temp is not None: #Py_XDECREF
-                    refcount = ctypes.c_long.from_address(id(temp))
-                    refcount.value -= 1 #don't need to dealloc since we have a ref in here and it'll always be >0
+                # Remove actual trace function
+                a_thread_state.c_tracefunc = ctypes.cast(None, PY_TRACEFUNC)
+                a_thread_state.c_traceobj  = empty_obj
+                a_thread_state.use_tracing = 1 if a_thread_state.c_profilefunc else 0
                 
+                # Py_XDECREF on old c traceobj
+                if old_c_traceobj is not None: 
+                    refcount = ctypes.c_long.from_address(id(temp))
+                    refcount.value -= 1 
+                    # don't need to dealloc since we keep a ref with old_c_traceobj
+                    # a ref in here and it'll always be >0
+                
+                # Setup new trace function
                 a_thread_state.c_tracefunc = trace_function
                 a_thread_state.c_traceobj  = trace_object
+                old_c_traceobj = a_thread_state.c_traceobj
+                print "==UODATED======================            a_thread_state.c_traceobj=%s" % old_c_traceobj
+                
                 a_thread_state.use_tracing = 1 if trace_function or a_thread_state.c_profilefunc else 0
             
             threads_state_looper = ctypes.pythonapi.PyThreadState_Next(threads_state_looper)
@@ -1077,6 +1103,7 @@ class IKPdb():
                         a_frame = a_frame.f_back
                     # activate trace on this thread
                     self.settrace_extended(thr, self._tracer)
+            #sys.settrace(self._tracer)
             threading.settrace(self._tracer)  # then all threads to come
             self.tracing_enabled = True
             
@@ -1174,7 +1201,7 @@ class IKPdb():
         
         # Set trace function for current_thread only to allow 
         # self.frame_beginning to be set.
-        sys.settrace(self._tracer)  
+        sys.settrace(self._tracer)
 
         if not isinstance(cmd, types.CodeType):
             cmd = cmd + '\n'
@@ -1184,6 +1211,7 @@ class IKPdb():
             pass
         finally:
             self.quitting = 1
+            print "========================finally"
             self.disable_tracing()
 
     def _runscript(self, filename):
