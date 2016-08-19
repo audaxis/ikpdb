@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 
 name = 'ikpdb'
 version = '0.0.1'
@@ -21,6 +21,8 @@ long_description = (
     open('CHANGES.txt').read()
     + '\n'
 )
+
+iksettrace_module = Extension('iksettrace', sources=['iksettrace.c'])
 
 setup(
     name = name,
@@ -46,7 +48,8 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
         'Natural Language :: English',
-     ]
+     ],
+     ext_modules=[iksettrace_module]
 #    ,entry_points={
 #        'console_scripts': [
 #            'ikpdb=ikpdb:main',
