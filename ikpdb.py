@@ -169,7 +169,6 @@ class IKPdbConnectionHandler():
     SOCKET_BUFFER_SIZE = 4096  # Maximum size of a packet received from client
     MSG_WAITALL = 0x100  # From Linux sys/socket.h
     
-    
     def __init__(self, connection):
         self._connection = connection
         self._connection_lock = threading.Lock()
@@ -218,7 +217,7 @@ class IKPdbConnectionHandler():
         """Build a response from a previsoulsy received command msg, send it
            and return number of sent bytes."""
         with self._connection_lock:
-            # TODO: add a parameter to remove args from messags ?
+            # TODO: add a parameter to remove args from messages ?
             if True:
                 del obj['args']
             obj['result'] = result
@@ -232,8 +231,9 @@ class IKPdbConnectionHandler():
             return send_bytes_count
 
     def receive(self):
-        """Waits for a message from the debugger and returns it as a dict"""
-#        with self._connection_lock:
+        """Waits for a message from the debugger and returns it as a dict.
+        """
+        # with self._connection_lock:
         while self._network_loop:
             _logger.n_debug("Enter socket.recv(%s) with self._received_data = %s", 
                             self.SOCKET_BUFFER_SIZE, 
@@ -241,7 +241,7 @@ class IKPdbConnectionHandler():
             try:
                 data = self._connection.recv(self.SOCKET_BUFFER_SIZE)
             except socket.error as socket_err:
-                return {'command': 'quit', 
+                return {'command': '_InternalQuit', 
                         'args':{'socket_error_number': socket_err.errno,
                                 'socket_error_str': socket_err.strerror}}
             _logger.n_debug("Socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
@@ -435,7 +435,15 @@ class IKBreakpoint:
 
 class IKPdb():
     
-    def __init__(self, skip=None, launch_working_directory=None):
+    def __init__(self, skip=None, launch_working_directory=None, 
+                 stop_at_first_statement=False):
+        """ Instantiate a debugger
+        :param skip: reserved for future use
+        :param launch_working_directory: allows to force base directory
+        :param stop_at_first_statement: defines wether debugger must break at
+        first statement. None no break, else break.
+        :type stop_at_first_statement: str
+        """
         self.skip = set(skip) if skip else None
         # TODO: manage skip
         
@@ -459,13 +467,13 @@ class IKPdb():
         self.frame_return = None
         self.frame_suspend = False  # If true, debugger will stop at next frame
         
-        # last frame to dump ; allows to dump only program frames         
+        # last frame to dump ; allows to dump only debugged program frames         
         self.frame_beginning = None
         
         # If True, debugger breaks on first line to allow user to setup 
         # some breakpoints.
-        self.initial_setup_break = False  
-        
+        self.stop_at_first_statement = True if stop_at_first_statement else False
+
 
     def canonic(self, file_name):
         """ returns canonical version of a file name.
@@ -703,7 +711,6 @@ class IKPdb():
     def setup_step_over(self, frame):
         """Setup debugger for a "stepOver"
         """
-        self.quitting = False
         self.frame_calling = None
         self.frame_stop = frame
         self.frame_return = frame.f_back
@@ -711,12 +718,14 @@ class IKPdb():
         self.pending_stop = True 
         return
 
-    def setup_step_into(self, frame):
+    def setup_step_into(self, frame, pure=False):
         """Setup debugger for a "stepInto"
         """
-        self.quitting = False
         self.frame_calling = frame
-        self.frame_stop = frame
+        if pure:
+            self.frame_stop = None
+        else:
+            self.frame_stop = frame
         self.frame_return = None
         self.frame_suspend = False
         self.pending_stop = True 
@@ -725,7 +734,6 @@ class IKPdb():
     def setup_step_out(self, frame):
         """Setup debugger for a "stepOut"
         """
-        self.quitting = False
         self.frame_calling = None
         self.frame_stop = None
         self.frame_return = frame.f_back
@@ -736,11 +744,6 @@ class IKPdb():
     def setup_suspend(self):
         """Setup debugger to "suspend" execution
         """
-        # if tracing is not active:
-            # activate tracing
-        #else:
-        print "===========================Entering setup_suspend()"
-        self.quitting = False
         self.frame_calling = None
         self.frame_stop = None
         self.frame_return = None
@@ -752,7 +755,6 @@ class IKPdb():
     def setup_resume(self):
         """Setup debugger to "resume" execution
         """
-        self.quitting = False
         self.frame_calling = None
         self.frame_stop = None
         self.frame_return = None
@@ -792,33 +794,21 @@ class IKPdb():
             return True
         # suspend
         if self.frame_suspend:
-            #print "======== can we suspend"
-            if True:
-                _logger.g_debug("%s, frame=%s, frame.f_code.co_filename=%s:lineno=%s",
-                                 threading.currentThread().name,
-                                 hex(id(frame)),
-                                 frame.f_code.co_filename,
-                                 frame.f_lineno)
-            
-            if threading.current_thread().ident != self.debugger_thread_ident:
-                print "======== suspend activated"
-                return True
-            else:
-                print threading.current_thread().ident, self.debugger_thread_ident
-                pass
-            #frame.f_code.co_filename.startswith(self._CWD):
-        
+            return True
+
         return False
 
     def should_break_here(self, frame):
         """ Check if there is a breakpoint at this frame or not.
         """
-        _logger.b_debug("should_break_here(filename=%s, lineno=%s) with breaks=%s",
-                        frame.f_code.co_filename,
-                        frame.f_lineno,
-                        IKBreakpoint.breakpoints_by_number)
+        #_logger.b_debug("should_break_here(filename=%s, lineno=%s) with breaks=%s",
+        #                frame.f_code.co_filename,
+        #                frame.f_lineno,
+        #                IKBreakpoint.breakpoints_by_number)
         
         c_file_name = self.canonic(frame.f_code.co_filename)
+        if not c_file_name in IKBreakpoint.breakpoints_files:
+            return False
         bp = IKBreakpoint.lookup_effective_breakpoint(c_file_name, 
                                                       frame.f_lineno, 
                                                       frame)
@@ -827,8 +817,7 @@ class IKPdb():
     def _line_tracer(self, frame, post_mortem=False):
         """This function is called when debugger has decided that we must
         stop or break at this frame."""
-        print "================> _line_tracer()"
-        
+        # next logging statement commented for performance
         _logger.f_debug("user_line() with_wait_for_mainpyfile=%s," 
                         "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
                         "self.should_break_here()=%s, self.should_stop_here()=%s\n",
@@ -840,9 +829,7 @@ class IKPdb():
                          self.should_break_here(frame),
                          self.should_stop_here(frame))
                       
-
-        # acquire breakpoint Lock before sending break command to Cloud9
-        print "=========================== before lock.acquire()"
+        # Acquire Breakpoint Lock before sending break command to remote client
         self._active_breakpoint_lock.acquire()
         frames = self.dump_frames(frame)
         exception=None
@@ -854,13 +841,11 @@ class IKPdb():
                 'info': post_mortem[1].message
             }
 
-        if self.initial_setup_break:
-            warning_messages = ["No breakpoints are defined ! IKPdb stopped so "
-                                "that you can setup some breakpoints then "
-                                "'Resume' execution."]
-            self.initial_setup_break = False
+        if self.stop_at_first_statement:
+            warning_messages = ["IKPdb stopped so that you can setup some "
+                                "breakpoints before 'Resuming' execution."]
+            self.stop_at_first_statement = False
 
-        print "================================= programBreak()"
         remote_client.send('programBreak', 
                            frames=frames,
                            result={'executionStatus': 'stopped'},
@@ -873,9 +858,7 @@ class IKPdb():
         # - step into
         # - step out
         # then resume execution
-        print "=========waiting for _resume_command_q"
         resume_command = self._resume_command_q.get()
-        print "=========received resume_command=%s" % resume_command
         if resume_command == 'resume':
             self.setup_resume()
         elif resume_command == 'stepOver':
@@ -885,46 +868,50 @@ class IKPdb():
         elif resume_command == 'stepOut':
             self.setup_step_out(frame)
         else:
-            raise IKPdbQuit("Not implemented")
+            _logger.x_critical("Unknown resume command: %s" % resume_command)
+            raise IKPdbQuit()
             
         self._active_breakpoint_lock.release()
         return
 
     def _tracer(self, frame, event, arg):
         if event == 'line':
-            #print "============> event 'line'"
             if not self.pending_stop:
                 return self._tracer                
             
-            #print "========> _tracer(event=%s, frame=%s, arg=%s) " % (event, frame, arg)
-            if self.should_stop_here(frame) or self.should_break_here(frame):
+            #if self.should_stop_here(frame) or self.should_break_here(frame):
+            #    self._line_tracer(frame)
+            # return self._tracer
+
+            # should_stop_here() is inlined for performance.
+            # See original code and called method  above
+            if (self.frame_calling and self.frame_calling==frame.f_back)  \
+                    or frame==self.frame_stop  \
+                    or frame==self.frame_return  \
+                    or self.frame_suspend  \
+                    or self.should_break_here(frame):
                 self._line_tracer(frame)
-                if self.quitting: 
-                    raise IKPdbQuit
             return self._tracer
         
         if event == 'call':
-            #print "========> _tracer(event=%s, frame=%s, arg=%s) " % (event, frame, arg)
             if self.frame_beginning is None:  
                 # First call of dispatch since reset()
                 self.frame_beginning = frame.f_back
                 # limited tracing of current thread has been enabled to allow
                 # self.frame_beginning to be set. 
-                # Now we set tracing globaly or disable it completely
-                # or remove tracer.
-                # we don't use enable_tracing() since this is the first and only
-                # thread to trace().
+                # Now depending on pending_stop and stop_at_first_statement 
+                # we set tracing globaly or  disable it completely by removing 
+                # the tracer.
+                if self.stop_at_first_statement:
+                    self.setup_step_into(frame, pure=True)
                 if self.pending_stop:
                     self.enable_tracing()
                 else:
-                    #pass TO remove
                     sys.settrace(None)  # we remove limited tracing
             return self._tracer
         
-        # return self._tracer for all other events
-        # Note that:
-        #   - event = 'return', returned value is ignored
-        #   - event = 'exception' will be used to trace exception
+        # Note that event = 'return', returned value is ignored
+        # TODO: Use event = 'exception' to trace exception
         return self._tracer
 
 
@@ -938,6 +925,8 @@ class IKPdb():
 
 
     def dump_tracing_state(self, context):
+        """ A debug tool to dump all threads tracing state 
+        """
         print "Dumping all threads Tracing state: (%s)" % context
         print "    self.tracing_enabled=%s" % self.tracing_enabled
         print "    self.execution_started=%s" % self.execution_started
@@ -965,28 +954,29 @@ class IKPdb():
                                                             flags_str)
                 a_frame = a_frame.f_back
 
-
     def enable_tracing(self):
-        """ Enable tracing if it disabled and debugged program is running, else
-        do nothing.
+        """ Enable tracing if it is disabled and debugged program is running, 
+        else do nothing.
         Do this on all threads but the debugger thread.
         :return: True if tracing has been enabled, False else.
         """
-        # TODO: set trace function for all active threads
         _logger.x_debug("enable_tracing()")
+        #self.dump_tracing_state("before enable_tracing()")
         if not self.tracing_enabled and self.execution_started:
             # Restore or set trace function on all frames
-            for thr in threading.enumerate():
-                # skip debugger thread
-                if thr.ident != self.debugger_thread_ident:
-                    a_frame = sys._current_frames()[thr.ident]
-                    while a_frame:
-                        a_frame.f_trace = self._tracer
-                        a_frame = a_frame.f_back
+            if False:
+                for thr in threading.enumerate():
+                    # skip debugger thread
+                    if thr.ident != self.debugger_thread_ident:
+                        a_frame = sys._current_frames()[thr.ident]
+                        while a_frame:
+                            a_frame.f_trace = self._tracer
+                            a_frame = a_frame.f_back
             threading.settrace(self._tracer)  # then all threads to come
             iksettrace._set_trace_on(self._tracer, self.debugger_thread_ident)
             self.tracing_enabled = True
-            
+        
+        #self.dump_tracing_state("after enable_tracing()")
         return self.tracing_enabled
 
     def disable_tracing(self):
@@ -997,11 +987,12 @@ class IKPdb():
         :return: False if tracing has disabled, False else.
         """
         _logger.x_debug("disable_tracing()")
-        self.dump_tracing_state("before disable_tracing()")
+        #self.dump_tracing_state("before disable_tracing()")
         if self.tracing_enabled and self.execution_started:
             threading.settrace(None)  # don't trace threads to come
             iksettrace._set_trace_off()
             self.tracing_enabled = False
+        #self.dump_tracing_state("after disable_tracing()")
         return self.tracing_enabled
 
     def set_breakpoint(self, file_name, line_number, condition=None, enabled=True):
@@ -1078,10 +1069,10 @@ class IKPdb():
             locals = globals
         self.reset()
         self.execution_started = True
-        #self.enable_tracing()
-        
-        # Set trace function for current_thread only to allow 
-        # self.frame_beginning to be set.
+
+        # Turn on limited tracing by setting trace function for 
+        # current_thread only. This allow self.frame_beginning to be set at
+        # first tracer "call" invocation.
         sys.settrace(self._tracer)
 
         if not isinstance(cmd, types.CodeType):
@@ -1091,8 +1082,6 @@ class IKPdb():
         except IKPdbQuit:
             pass
         finally:
-            self.quitting = 1
-            print "========================finally"
             self.disable_tracing()
 
     def _runscript(self, filename):
@@ -1259,6 +1248,7 @@ class IKPdb():
 
             elif command == 'runScript':
                 _logger.x_debug("runScript(%s)", args)
+                #TODO: handle a 'stopAtEntry' arg
                 run_script_event.set()
                 remote_client.reply(obj, {'executionStatus': 'running'})
 
@@ -1292,19 +1282,29 @@ class IKPdb():
 
             elif command == 'evaluate':
                 _logger.e_debug("evaluate(%s)", args)
-                value, result_type = self.evaluate(args['frame'], args['expression'], args['global'], disable_break=args['disableBreak'])
-                remote_client.reply(obj, {'value': value, 'type': result_type})  # result
+                value, result_type = self.evaluate(args['frame'], 
+                                                   args['expression'], 
+                                                   args['global'], 
+                                                   disable_break=args['disableBreak'])
+                remote_client.reply(obj, {'value': value, 'type': result_type})
 
-            elif command == 'quit':
-                _logger.e_debug("quit(%s)", args)
+            elif command == '_InternalQuit':
+                # '_InternalQuit' is an IKPdb internal message, generated by 
+                # IKPdbConnectionHandler when a socket.error occured.
+                # Usually this occurs when socket has been destroyed as 
+                # debugged program sys.exit()
+                # So we leave the command loop to stop the debugger thread
+                # in order to allow debugged program to shutdown correctly.
+                # This message must NEVER be send by remote client.
+                _logger.e_debug("_InternalQuit(%s)", args)
                 return
             
-            else:
+            else: # unrecognized command ; just log and ignored
                 _logger.g_critical("Unsupported command '%s' ignored.", command)
-                #return
 
-            if True:
-                _logger.b_debug("Current breakpoints list [any_active_breakpoint=%s]:", IKBreakpoint.any_active_breakpoint) 
+            if IKPdbLogger.enabled:
+                _logger.b_debug("Current breakpoints list [any_active_breakpoint=%s]:", 
+                                IKBreakpoint.any_active_breakpoint) 
                 _logger.b_debug("    IKBreakpoint.breakpoints_by_file_and_line:")
                 if not IKBreakpoint.breakpoints_by_file_and_line:
                     _logger.b_debug("        <empty>") 
@@ -1344,8 +1344,6 @@ def post_mortem(trace_back, exc_info=None):
         ikpdb._line_tracer(pm_traceback.tb_frame, post_mortem=exc_info)
     else:
         ikpdb._line_tracer(pm_traceback.tb_frame)
-        
-    #ikpdb.forget()
     _logger.g_info("Post mortem debugger finished.")
 
 ##
@@ -1398,6 +1396,10 @@ def main():
                         dest="IKPDB_SEND_WELCOME_MESSAGE",
                         default=True,
                         help="Send a Welcome 'start' message at client connection.")
+    parser.add_argument("-ik_s", "--ikpdb-stop-at-entry",
+                        dest="IKPDB_STOP_AT_ENTRY",
+                        default=None,
+                        help="Break on debugged program first statement.")
     parser.add_argument("script_command_args",
                         metavar="scriptfile [args]",
                         help="Debugged script followed by all his args.",
@@ -1461,7 +1463,7 @@ def main():
     remote_client = IKPdbConnectionHandler(client_connection)  
     
     global ikpdb
-    ikpdb = IKPdb()
+    ikpdb = IKPdb(stop_at_first_statement=cmd_line_args.IKPDB_STOP_AT_ENTRY)
 
     if cmd_line_args.IKPDB_SEND_WELCOME_MESSAGE:  
         remote_client.send("start", info_messages=["Welcome to", "IKPdb", __version__])

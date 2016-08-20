@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages, Extension
 
 name = 'ikpdb'
-version = '0.0.1'
+version = '1.0.0-alpha'
 
 
 long_description = (
@@ -34,9 +34,9 @@ setup(
     license='MIT',
     author='Cyril MORISSE',
     author_email='cmorisse@boxes3.net',
-    description="A debugger built for network remote debugging and web/online IDE integration.",
+    description="A hackable debugger built for network remote debugging and web/online IDE integration.",
     long_description = long_description,
-    keywords = "bdb debugger debug remote tcp",
+    keywords = "debugger debug remote tcp",
     include_package_data=True,
     #install_requires=['setuptools',],
     classifiers=[
