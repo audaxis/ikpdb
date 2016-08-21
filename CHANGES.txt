@@ -1,5 +1,6 @@
-=====
-0.0.1
-=====
+===========
+1.0.0-alpha
+===========
 
-- First packaged beta version
+- First version with command loop in a thread.
+
