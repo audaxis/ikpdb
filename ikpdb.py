@@ -461,10 +461,10 @@ class IKPdb():
         self.tracing_enabled = False
 
         # stop management
-        self.pending_stop = False
-        self.frame_stop = None
-        self.frame_calling = None
-        self.frame_return = None
+        self.pending_stop = False  # True if any of frame_xxxx is set
+        self.frame_stop = None # stepOver and stepInto
+        self.frame_calling = None  # stepInto
+        self.frame_return = None  # stepOut and stepOver
         self.frame_suspend = False  # If true, debugger will stop at next frame
         
         # last frame to dump ; allows to dump only debugged program frames         
@@ -759,8 +759,8 @@ class IKPdb():
         self.frame_stop = None
         self.frame_return = None
         self.frame_suspend = False
-        self.pending_stop = IKBreakpoint.any_active_breakpoint
-        if not self.pending_stop:
+        self.pending_stop = False
+        if not IKBreakpoint.any_active_breakpoint:
             self.disable_tracing()
         return
 
@@ -817,6 +817,7 @@ class IKPdb():
     def _line_tracer(self, frame, post_mortem=False):
         """This function is called when debugger has decided that we must
         stop or break at this frame."""
+        
         # next logging statement commented for performance
         _logger.f_debug("user_line() with_wait_for_mainpyfile=%s," 
                         "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
@@ -876,21 +877,28 @@ class IKPdb():
 
     def _tracer(self, frame, event, arg):
         if event == 'line':
-            if not self.pending_stop:
-                return self._tracer                
             
             #if self.should_stop_here(frame) or self.should_break_here(frame):
             #    self._line_tracer(frame)
             # return self._tracer
 
             # should_stop_here() is inlined for performance.
-            # See original code and called method  above
-            if (self.frame_calling and self.frame_calling==frame.f_back)  \
-                    or frame==self.frame_stop  \
-                    or frame==self.frame_return  \
-                    or self.frame_suspend  \
-                    or self.should_break_here(frame):
+            # See original code and called method above
+            if self.pending_stop and (
+                (self.frame_calling and self.frame_calling==frame.f_back)
+                        or frame==self.frame_stop
+                        or frame==self.frame_return
+                        or self.frame_suspend
+                        or self.should_break_here(frame)):
                 self._line_tracer(frame)
+            
+            # self.should_break_here() is inlined too for performance 
+            c_file_name = self.canonic(frame.f_code.co_filename)
+            if c_file_name in IKBreakpoint.breakpoints_files:
+                if IKBreakpoint.lookup_effective_breakpoint(c_file_name, 
+                                                            frame.f_lineno,
+                                                            frame):
+                    self._line_tracer(frame)
             return self._tracer
         
         if event == 'call':
@@ -904,7 +912,7 @@ class IKPdb():
                 # the tracer.
                 if self.stop_at_first_statement:
                     self.setup_step_into(frame, pure=True)
-                if self.pending_stop:
+                if self.pending_stop or IKBreakpoint.any_active_breakpoint:
                     self.enable_tracing()
                 else:
                     sys.settrace(None)  # we remove limited tracing
@@ -1005,8 +1013,7 @@ class IKPdb():
         if not line:
             return 'Line %s:%d does not exist' % (c_file_name, line_number), None
         bp = IKBreakpoint(c_file_name, line_number, condition, enabled)
-        self.pending_stop = IKBreakpoint.any_active_breakpoint
-        if self.pending_stop:
+        if self.pending_stop or IKBreakpoint.any_active_breakpoint:
             self.enable_tracing()
         else:
             self.disable_tracing()
@@ -1031,8 +1038,7 @@ class IKPdb():
         bp.enabled = enabled
         bp.condition = condition  # update condition for conditional breakpoints
         IKBreakpoint.update_active_breakpoint_flag()  # force flag refresh
-        self.pending_stop = IKBreakpoint.any_active_breakpoint
-        if self.pending_stop:
+        if self.pending_stop or IKBreakpoint.any_active_breakpoint:
             self.enable_tracing()
         else:
             self.disable_tracing()
@@ -1053,8 +1059,7 @@ class IKPdb():
                         breakpoint_number,
                         bp)
         bp.clear()
-        self.pending_stop = IKBreakpoint.any_active_breakpoint         
-        if self.pending_stop:
+        if self.pending_stop or IKBreakpoint.any_active_breakpoint:
             self.enable_tracing()
         else:
             self.disable_tracing()
