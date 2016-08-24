@@ -845,10 +845,10 @@ class IKPdb:
         exception=None
         warning_messages = []
 
-        if post_mortem:
+        if exc_info:
             exception = {
-                'type': IKPdbRepr(post_mortem[1]),
-                'info': post_mortem[1].message
+                'type': IKPdbRepr(exc_info[1]),
+                'info': exc_info[1].message
             }
 
         if self.stop_at_first_statement:
@@ -930,16 +930,6 @@ class IKPdb:
         # Note that event = 'return', returned value is ignored
         # TODO: Use event = 'exception' to trace exception
         return self._tracer
-
-
-    def set_trace(self, frame=None):
-        """Start debugging from "frame".
-        If frame is not specified, debugging starts from caller's frame.
-        """
-        if frame is None:
-            frame = sys._getframe().f_back
-        self._line_tracer(frame)
-
 
     def dump_tracing_state(self, context):
         """ A debug tool to dump all threads tracing state 
@@ -1114,13 +1104,11 @@ class IKPdb:
         # events depends on python version). So we take special measures to
         # avoid stopping before we reach the main script (see user_line and
         # user_call for details).
-        self._wait_for_mainpyfile = 1
         self.mainpyfile = self.canonic(filename)
-        self._user_requested_quit = 0
         statement = 'execfile(%r)' % filename
         self.run(statement)
         
-    def command_loop(self, run_script_event, post_mortem=False):
+    def command_loop(self, run_script_event):
         """ return 1 to exit command_loop and resume execution 
         """
         while True:
@@ -1322,42 +1310,54 @@ class IKPdb:
                 if not IKBreakpoint.breakpoints_by_file_and_line:
                     _logger.b_debug("        <empty>") 
                 for file_line, bp in IKBreakpoint.breakpoints_by_file_and_line.items():
-                    _logger.b_debug("        %s => number=%s, enabled=%s, condition=%s", 
+                    _logger.b_debug("        %s => #%s, enabled=%s, condition=%s, %s", 
                                     file_line,
                                     bp.number,
                                     bp.enabled,
-                                    repr(bp.condition))
+                                    repr(bp.condition),
+                                    bp)
                 _logger.b_debug("    IKBreakpoint.breakpoints_files = %s", 
                                 IKBreakpoint.breakpoints_files)
                 _logger.b_debug("    IKBreakpoint.breakpoints_by_number = %s", 
                                 IKBreakpoint.breakpoints_by_number)
 
         
-def set_trace():
-    """ breaks on the line that invoked this function. 
+def set_trace(frame=None):
+    """ Breaks on the line that invoked this function or at given frame.
     """
     global ikpdb
     if not ikpdb:
         raise Exception("IKPdb must be launched before calling ikpd.set_trace().")
-    ikpdb.set_trace(sys._getframe().f_back)
 
-def post_mortem(trace_back, exc_info=None):
-    """ given a trace back, post_mortem() will break on it. This is useful for 
-        integration with system that manages Exceptions to allow them to 
-        set up a developer mode where Unhandled exceptions a returned to 
-        the developer.
+    if frame is None:
+        frame = sys._getframe().f_back
+    ikpdb._line_tracer(frame)
+
+def post_mortem(exc_info):
+    """ Breaks on an exception and send all execution information to the debugger 
+    client. 
+    If no exc_info is given try get it from sys.exc_info(). 
+    If no exception is currently handled, break at caller.
+    
+    This is useful for integrating with systems that manages Exceptions. Using 
+    this function systems can set a developer mode where unhandled exceptions 
+    are sente to the developer.
+    
+    :param exc_info: information about the exception to break on.
+    :type exc_info: tuple
     """
     global ikpdb
     if not ikpdb:
         raise Exception("IKPdb must be launched before calling ikpd.post_mortem().")
-    pm_traceback = trace_back
+        
+    if exc_info == (None, None, None):
+        raise Exception("Missing exc_info parameter when calling ikpdb.post_mortem()")
+        
+    pm_traceback = exc_info[2]
     while pm_traceback.tb_next:
         pm_traceback = pm_traceback.tb_next      
-    if exc_info:
-        ikpdb._line_tracer(pm_traceback.tb_frame, post_mortem=exc_info)
-    else:
-        ikpdb._line_tracer(pm_traceback.tb_frame)
-    _logger.g_info("Post mortem debugger finished.")
+        ikpdb._line_tracer(pm_traceback.tb_frame, exc_info=exc_info)
+    _logger.g_info("Post mortem processing finished.")
 
 ##
 # Signal Handler to properly close socket connection
@@ -1537,13 +1537,12 @@ def main():
         while pm_traceback.tb_next:
             pm_traceback = pm_traceback.tb_next      
         
-        ikpdb._line_tracer(pm_traceback.tb_frame, post_mortem=sys.exc_info())
+        ikpdb._line_tracer(pm_traceback.tb_frame, exc_info=sys.exc_info())
         
         try:
             remote_client.send('programEnd', 
                                result={'exit_code': None, 
-                                       'executionStatus': 'terminated'}, 
-                               command_exec_status="ok")
+                                       'executionStatus': 'terminated'})
         except:
             pass
         
