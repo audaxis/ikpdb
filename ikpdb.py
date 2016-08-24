@@ -1404,6 +1404,10 @@ def main():
                         dest="IKPDB_STOP_AT_ENTRY",
                         default=None,
                         help="Break on debugged program first statement.")
+    parser.add_argument("-ik_cwd", "--ikpdb-working-directory",
+                        dest="IKPDB_WORKING_DIRECTORY",
+                        default=None,
+                        help="Allows to force debugger's Current Working Directory (CWD)")
     parser.add_argument("script_command_args",
                         metavar="scriptfile [args]",
                         help="Debugged script followed by all his args.",
@@ -1418,7 +1422,7 @@ def main():
 
     _logger.g_info("IKPdb %s - Inouk Python Debugger for CPython 2.7", __version__)
     _logger.g_debug("  interpreter: '%s'", sys.executable)
-    _logger.g_debug(" args: %s", cmd_line_args)
+    _logger.g_debug("  args: %s", cmd_line_args)
     _logger.g_debug("  starts debugging: '%s'", " ".join(sys.argv))
     _logger.g_debug("  with CWD = '%s'", os.getcwd())
     
@@ -1429,7 +1433,7 @@ def main():
     # By using argparse.REMAINDER, sys.argv reflects command line of
     # debugged script with all IKPdb args removed
     mainpyfile =  sys.argv[0]     # Get script filename
-    _logger.g_debug("mainpyfile = '%s'", mainpyfile)
+    _logger.g_debug("  mainpyfile = '%s'", mainpyfile)
     if not os.path.exists(mainpyfile):
         print 'Error:', mainpyfile, 'does not exist'
         sys.exit(1)
@@ -1467,7 +1471,8 @@ def main():
     remote_client = IKPdbConnectionHandler(client_connection)  
     
     global ikpdb
-    ikpdb = IKPdb(stop_at_first_statement=cmd_line_args.IKPDB_STOP_AT_ENTRY)
+    ikpdb = IKPdb(stop_at_first_statement=cmd_line_args.IKPDB_STOP_AT_ENTRY,
+                  working_directory=cmd_line_args.IKPDB_WORKING_DIRECTORY)
 
     if cmd_line_args.IKPDB_SEND_WELCOME_MESSAGE:  
         remote_client.send("start", info_messages=["Welcome to", "IKPdb", __version__])
