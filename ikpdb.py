@@ -433,24 +433,33 @@ class IKBreakpoint:
         cls.update_active_breakpoint_flag()
         return
 
-class IKPdb():
+class IKPdb:
+    """ Main debugger class.
+
+    :param skip: reserved for future use
+    :param working_directory: allows to force debugger's Current Working 
+                              Directory (CWD). `working_directory` is used for file
+                              mapping between IKPdb and clients. 
+                              `working_directory` is concatenated with file path
+                              exchanged with debugger's client to get absolute 
+                              file's paths.
+    :type working_directory: str
+    :param stop_at_first_statement: defines wether debugger must break at
+                                    first statement. None don't break, else break.
+    :type stop_at_first_statement: str
+        
+    Take note that, right now, IKPdb is used as singleton.
+    """
     
-    def __init__(self, skip=None, launch_working_directory=None, 
-                 stop_at_first_statement=False):
-        """ Instantiate a debugger
-        :param skip: reserved for future use
-        :param launch_working_directory: allows to force base directory
-        :param stop_at_first_statement: defines wether debugger must break at
-        first statement. None no break, else break.
-        :type stop_at_first_statement: str
-        """
+    def __init__(self, skip=None, stop_at_first_statement=False,
+                 working_directory=None):
         self.skip = set(skip) if skip else None
         # TODO: manage skip
         
         self.debugger_thread_ident = None
         self.file_name_cache = {}        
         
-        self._CWD = launch_working_directory or os.getcwd()
+        self._CWD = working_directory or os.getcwd()
         self.mainpyfile = ''
         self._active_breakpoint_lock = threading.Lock()
         self._active_thread_lock = threading.Lock()
