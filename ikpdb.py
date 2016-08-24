@@ -823,15 +823,14 @@ class IKPdb:
                                                       frame)
         return True if bp else False
 
-    def _line_tracer(self, frame, post_mortem=False):
+    def _line_tracer(self, frame, exc_info=False):
         """This function is called when debugger has decided that we must
         stop or break at this frame."""
         
         # next logging statement commented for performance
-        _logger.f_debug("user_line() with_wait_for_mainpyfile=%s," 
+        _logger.f_debug("user_line() with " 
                         "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
                         "self.should_break_here()=%s, self.should_stop_here()=%s\n",
-                         self._wait_for_mainpyfile,
                          threading.currentThread().name,
                          hex(id(frame)),
                          frame.f_code,
