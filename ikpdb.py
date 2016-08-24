@@ -1450,7 +1450,7 @@ def post_mortem(exc_info):
     pm_traceback = exc_info[2]
     while pm_traceback.tb_next:
         pm_traceback = pm_traceback.tb_next      
-        ikpdb._line_tracer(pm_traceback.tb_frame, exc_info=exc_info)
+    ikpdb._line_tracer(pm_traceback.tb_frame, exc_info=exc_info)
     _logger.g_info("Post mortem processing finished.")
 
 ##
