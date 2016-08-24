@@ -1527,9 +1527,9 @@ def main():
     _logger.g_debug("  interpreter: '%s'", sys.executable)
     _logger.g_debug("  args: %s", cmd_line_args)
     _logger.g_debug("  starts debugging: '%s'", " ".join(sys.argv))
-    _logger.g_debug("  CWD = '%s'", os.getcwd())
+    _logger.g_debug("  CWD: '%s'", os.getcwd())
     if cmd_line_args.IKPDB_WORKING_DIRECTORY:
-        _logger.g_debug("  Working Directory forced to = '%s'", 
+        _logger.g_debug("  Working Directory forced to: '%s'", 
                         cmd_line_args.IKPDB_WORKING_DIRECTORY)
         
     
