@@ -69,7 +69,13 @@ class MetaIKPdbLogger(type):
             return cls._log(domain, level, *args, **kwargs)
         return wrapper
 
-class IKPdbLogger():
+class IKPdbLogger:
+    """ IKPdb implements it's own logging system to:
+
+    - avoid problem while debugging programs that reconfigure logging system 
+      wide.
+    - allow IKPdb debugging...
+    """
     __metaclass__ = MetaIKPdbLogger
     
     enabled = False
@@ -113,12 +119,17 @@ class IKPdbLogger():
 
     @classmethod
     def setup(cls, ikpdb_log_arg):
-        """activates DEBUG logging level based on the --ikpdb-log command
-           line argument.
-           IKPDB_LOG is a string composed of a serie of letters which
-           switch debug logging level on components of the debugger.
-           Here are the letters and the component they activate DEBUG logging 
-           level on:
+        """ activates DEBUG logging level based on the `ikpdb_log_arg` 
+        parameter string.
+        
+        `ikpdb_log_arg` corresponds to the `--ikpdb-log` command line argument.
+           
+        `ikpdb_log_arg` is composed of a serie of letters that set the `DEBUG` 
+        logging level on the components of the debugger.
+           
+        Here are the letters and the component they activate `DEBUG` logging 
+        level on:
+        
             - n,N: Network 
             - b,B: Breakpoints 
             - e,E: Expression evaluation
@@ -126,11 +137,24 @@ class IKPdbLogger():
             - f,F: Frame 
             - p,P: Path and python path manipulation
             - g,G: Global debugger
-           by default logging is disabled for all components. A value in 
-           --ikpdb-log arg activates INFO level logging on all domains. 
+        
+        By default logging is disabled for all components. 
+        Any `ikpdb_log_arg` value different from the letters above (eg: '9') 
+        activates `INFO`  level logging on all domains.
+        
+        To log, use::
+        
+            _logger.x_debug("useful information")
+    
+        Where:
+            - `_logger` is a reference to the IKPdbLogger class
+            - `x` is the `Execution` domain
+            - `debug` is the logging level
+        
         """
         if not ikpdb_log_arg:
             return
+        
         IKPdbLogger.enabled = True
         logging_configuration_string = ikpdb_log_arg.lower()
         for letter in logging_configuration_string:
@@ -156,12 +180,15 @@ _logger = IKPdbLogger
 class IKPdbConnectionError(Exception):
     pass
 
-class IKPdbConnectionHandler():
-    """ Manages a connection with a remote client. 
-    IKpdb and remote client communicate with messages having this structure:
-    length={{length - as integer - of json_message_body below}}{{MAGIC_CODE}}{{message_body_as_json_dump}}
+class IKPdbConnectionHandler:
+    """ IKPdbConnectionHandler manages a connection with a remote client once
+    it is established.
     
-    Where {{...}} must be replaced by real content.
+    IKpdb and remote client exchanges messages having this structure:
+    
+    ``length={{integer length of json_message_body below}}{{MAGIC_CODE}}{{json_dump_of_message_body}}``
+    
+    This class contains methods to receive, send and reply to such messages.
     """
     MAGIC_CODE = "LLADpcdtbdpac"
     MESSAGE_TEMPLATE = "length=%s"+MAGIC_CODE+"%s"
@@ -190,16 +217,49 @@ class IKPdbConnectionHandler():
     def log_received(self, msg):
         _logger.n_debug("Received %s bytes >>>%s<<<", len(msg), msg)
     
-    def send(self, command, _id=None, result={}, command_exec_status="ok", 
-             frames=[], error_messages=[], warning_messages=[], info_messages=[],
+    def send(self, command, _id=None, result={}, frames=[], 
+             error_messages=[], warning_messages=[], info_messages=[],
              exception=None):
-        """Build a message from passed dict object and send it to debugger"""
+        """ Build a message from parameters and send it to debugger.
+        
+        :param command: The command sent to the debugger client.
+        :type command: str
+        :param _id: Unique id of the sent message. Right now, it's always `None`
+                    for messages by debugger to client.
+        :type _id: int
+        
+        :param result: Used to send `exit_code` and updated `executionStatus` 
+                       to debugger client.
+        :type result: dict
+        
+        :param frames: contains the complete stack frames when debugger sends
+                       the `programBreak`message.
+        :type frames: list
+
+        :param error_messages: A list of error messages the debugger client must
+                               display to the user.
+        :type error_messages: list of str
+        
+        :param warning_messages: A list of warning messages the debugger client
+                                 must display to the user.
+        :type warning_messages: list of str
+        
+        :param info_messages: A list of info messages the debugger client must
+                               display to the user.
+        :type info_messages: list of str
+
+        :param exception: If debugger encounter an exception, this dict contains
+                          2 keys: `type` and `info` (the later is the message).
+        :type exception: dict
+
+        
+        """
         with self._connection_lock:
             msg = self.encode({
                 '_id': _id,
                 'command': command,
                 'result': result,
-                'commandExecStatus': command_exec_status,
+                'commandExecStatus': 'ok',
                 'frames': frames,
                 'info_messages': info_messages,
                 'warning_messages': warning_messages,
@@ -214,8 +274,15 @@ class IKPdbConnectionHandler():
 
     def reply(self, obj, result, command_exec_status='ok', info_messages=[], 
               warning_messages=[], error_messages=[]):
-        """Build a response from a previsoulsy received command msg, send it
-           and return number of sent bytes."""
+        """Build a response from a previouslsy received command message, send it
+           and return number of sent bytes.
+        
+        :param result: Used to send back the result of the command execution to 
+                       the debugger client.
+        :type result: dict
+
+        See send() above for others parameters definition.
+        """
         with self._connection_lock:
             # TODO: add a parameter to remove args from messages ?
             if True:
@@ -282,14 +349,14 @@ class IKPdbConnectionHandler():
 # Debugger
 #
 
-class IKPdbException(Exception):
-    pass
-
 class IKPdbQuit(Exception):
+    """ A dummy Exception used by debugger to quit debugged program.
+    """
     pass
 
 def IKPdbRepr(t):
-    """returns a type representation suitable for debugger GUI
+    """ A function that returns a type representation suitable for debugger GUI.
+    
     :param t: anyThing
     """
     if hasattr(t, '__class__'):
@@ -298,24 +365,47 @@ def IKPdbRepr(t):
     return str(t_type).split(' ')[1][1:-2]
 
 class IKBreakpoint:
-    """Breakpoints manager.
+    """ IKBreakpoint implements IKPdb Breakpoints. 
     
-    This class manages 3 lists of breakpoints:
+    Basically a breakpoint is described by:
+    
+    - `number`: a uniq breakpoint number
+    - `file_name`: using a canonical file path
+    - `line_number`: 0 based
+    - `condition`: an optional python expression used to trigger conditional breakpoints.Basically
+    - `enabled`: a flag to enable / disable the breakpoint
+    
+    The debugger manages Breakpoints using 3 lists maintained by IKBreakpoint:
+    
      - `breakpoints_files` contains all breakpoints line numbers indexed by file_name
      - `breakpoints_by_file_and_line` contains all breakpoints indexed by (file, line)
-     - `breakpoints_by_number`is a zero based indexed list of all breakpoints.
+     - `breakpoints_by_number` is a zero based indexed list of all breakpoints.
+     
+    This class also maintains a `any_active_breakpoint` boolean class attribute
+    that is False when there is no active breakpoint. This flag is used to 
+    trigger `TURBO Mode`.
+     
+    :param file_name: a CANONICAL file name.
+    :type file_name: str
+        
+    :param line_number: 0 based line number of the breakpoint.
+    :type line_number: int
+        
+    :param condition: an optional python expression used to trigger 
+                      conditional breakpoints.
+    :type condition: str
+
+    :param enabled: a flag to enable / disable the breakpoint.
+    :type enabled: bool
+        
     """
-    breakpoints_files = {}  # list of lines indexed by __CANONICAL__ file names
-    breakpoints_by_file_and_line = {}  # breakpoint indexed by (CANONICAL_file, line)
-    breakpoints_by_number = []  # indexed by number with value = breakpoint.
-    
-    next_breakpoint_number = 0
-    any_active_breakpoint = False
+    breakpoints_files = {}  #: list of lines indexed by canonical file names
+    breakpoints_by_file_and_line = {}  #: list of breakpoints indexed by (file_name, line)
+    breakpoints_by_number = []  #: list of breakpoints indexed by number.
+    next_breakpoint_number = 0  #: Used to allocate next breakpoint number.
+    any_active_breakpoint = False #: False when there is no active breakpoint.
     
     def __init__(self, file_name, line_number, condition=None, enabled=True):
-        """
-        :param file_name: a CANONICAL file name
-        """
         self.file_name = file_name    # In canonical form!
         self.line_number = line_number
         self.condition = condition
@@ -334,8 +424,7 @@ class IKBreakpoint:
             IKBreakpoint.any_active_breakpoint = True            
 
     def clear(self):
-        """ Clear a breakpoint by removing it from all lists so that it is no
-        longer used.
+        """ Clear a breakpoint by removing it from all lists.
         """
         del IKBreakpoint.breakpoints_by_file_and_line[self.file_name, self.line_number]
         IKBreakpoint.breakpoints_by_number[self.number] = None
@@ -354,9 +443,10 @@ class IKBreakpoint:
     @classmethod
     def lookup_effective_breakpoint(cls, file_name, line_number, frame):
         """ Checks if there is an enabled breakpoint at given file_name and 
-        line_number. Check breakpoint condition is any.
-        :returns: found, enabled and condition verified breakpoint or None
-        :rtype: IKPdbBreakpoint
+        line_number. Check breakpoint condition if any.
+        
+        :return: found, enabled and condition verified breakpoint or None
+        :rtype: IKPdbBreakpoint or None
         """
         bp = cls.breakpoints_by_file_and_line.get((file_name, line_number), None)
         if not bp:
@@ -376,8 +466,10 @@ class IKBreakpoint:
 
     @classmethod
     def get_breakpoints_list(cls):
-        """Returns a list of all breakpoints with their complete state in a 
-        dict.
+        """:return: a list of all breakpoints.
+        :rtype: a list of dict with this keys: `breakpoint_number`, `bp.number`,
+                `file_name`, `line_number`, `condition`, `enabled`.
+                
         Warning: IKPDb line numbers are 1 based so line number conversion
         must be done by clients (eg. inouk.ikpdb for Cloud9)
         """
@@ -396,7 +488,7 @@ class IKBreakpoint:
 
     @classmethod
     def disable_all_breakpoints(cls):
-        """Disable all breakpoints and udate `active_breakpoint_flag'.
+        """ Disable all breakpoints and udate `active_breakpoint_flag`.
         """
         for bp in cls.breakpoints_by_number:
             if bp:  # breakpoint #0 exists and is always None
@@ -419,8 +511,8 @@ class IKBreakpoint:
     @classmethod
     def restore_breakpoints_state(cls, breakpoints_state_list):
         """Restore the state of breakpoints given a list provided by 
-        backup_breakpoints_state(). If breakpoint list has changed since backup
-        missing or added breakpoints are ignored.
+        backup_breakpoints_state(). If list of breakpoint has changed 
+        since backup missing or added breakpoints are ignored.
         
         breakpoints_state_list is a list of tuple. Each tuple is of form:
         (breakpoint_number, enabled, condition)
@@ -499,10 +591,11 @@ class IKPdb:
         return c_file_name
 
     def lookup_module(self, file_name):
-        """Translate a (possibly incomplete) file or module name into an 
+        """ Translate a (possibly incomplete) file or module name into an 
         absolute file name.
         """
         _logger.p_debug("lookup_module(%s) with os.getcwd()=>%s", file_name, os.getcwd())
+        
         if os.path.isabs(file_name) and os.path.exists(file_name):
             return file_name
             
@@ -1017,9 +1110,10 @@ class IKPdb:
         return None, bp.number
 
     def change_breakpoint_state(self, bp_number, enabled, condition=None):
-        """ Change breakpoint status or `condition` expression. 
-            :param bp_number: number of breakpoint to change 
-            :returns: None or an error message (string)
+        """ Change breakpoint status or `condition` expression.
+        
+        :param bp_number: number of breakpoint to change 
+        :return: None or an error message (string)
         """
         if not (0 <= bp_number < len(IKBreakpoint.breakpoints_by_number)):
             return "Found no breakpoint numbered: %s" % bp_number
@@ -1042,7 +1136,8 @@ class IKPdb:
         return None
 
     def clear_breakpoint(self, breakpoint_number):
-        """ Delete a breakpoint identidied by it's number. 
+        """ Delete a breakpoint identified by it's number. 
+        
         :param breakpoint_number:  index of breakpoint to delete
         :type breakpoint_number: int
         :return: an error message or None
@@ -1063,7 +1158,7 @@ class IKPdb:
         return None
 
     def run(self, cmd, globals=None, locals=None):
-        """ Overloaded to debug multithreaded programs"""
+        """ launch debugging of a git statuc"""
         if globals is None:
             import __main__
             globals = __main__.__dict__
@@ -1501,8 +1596,7 @@ def main():
         debugger_thread.join()
         remote_client.send('programEnd', 
                            result={'exit_code': None, 
-                                   'executionStatus': 'terminated'}, 
-                           command_exec_status="ok")
+                                   'executionStatus': 'terminated'})
         _logger.g_info("Program terminated with no returned value.")  # TODO: send this to the debuger gui
         sys.exit(0)
 
@@ -1515,8 +1609,7 @@ def main():
         try:
             remote_client.send('programEnd', 
                                result={'exit_code': exit_code, 
-                                       'executionStatus': 'terminated'}, 
-                               command_exec_status="ok")
+                                       'executionStatus': 'terminated'})
         except:
             pass
         close_connection()
