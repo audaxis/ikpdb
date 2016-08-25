@@ -371,7 +371,7 @@ class IKBreakpoint:
     
     - `number`: a uniq breakpoint number
     - `file_name`: using a canonical file path
-    - `line_number`: 0 based
+    - `line_number`: 1 based
     - `condition`: an optional python expression used to trigger conditional breakpoints.Basically
     - `enabled`: a flag to enable / disable the breakpoint
     
@@ -379,7 +379,7 @@ class IKBreakpoint:
     
      - `breakpoints_files` contains all breakpoints line numbers indexed by file_name
      - `breakpoints_by_file_and_line` contains all breakpoints indexed by (file, line)
-     - `breakpoints_by_number` is a zero based indexed list of all breakpoints.
+     - `breakpoints_by_number` is an indexed list of all breakpoints.
      
     This class also maintains a `any_active_breakpoint` boolean class attribute
     that is False when there is no active breakpoint. This flag is used to 
@@ -388,7 +388,7 @@ class IKBreakpoint:
     :param file_name: a CANONICAL file name.
     :type file_name: str
         
-    :param line_number: 0 based line number of the breakpoint.
+    :param line_number: breakpoint's line number (1 based).
     :type line_number: int
         
     :param condition: an optional python expression used to trigger 
@@ -744,7 +744,7 @@ class IKPdb:
             remote_frame = {
                 'id': id(frame_browser),
                 'name': frame_name,
-                'line_number': frame_browser.f_lineno,  # Warning 0 based
+                'line_number': frame_browser.f_lineno,  # Warning 1 based
                 'file_path': frame_browser.f_code.co_filename, 
                 'thread': id(current_tread),
                 'f_locals': locals_vars_list
