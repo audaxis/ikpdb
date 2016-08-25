@@ -1064,13 +1064,13 @@ class IKPdb:
         if not self.tracing_enabled and self.execution_started:
             # Restore or set trace function on all existing frames appart from 
             # debugger
+            threading.settrace(self._tracer)  # then enable on all threads to come
             for thr in threading.enumerate():
                 if thr.ident != self.debugger_thread_ident:  # skip debugger thread
                     a_frame = sys._current_frames()[thr.ident]
                     while a_frame:
                         a_frame.f_trace = self._tracer
                         a_frame = a_frame.f_back
-            threading.settrace(self._tracer)  # then enable on all threads to come
             iksettrace._set_trace_on(self._tracer, self.debugger_thread_ident)
             self.tracing_enabled = True
         
