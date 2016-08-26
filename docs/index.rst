@@ -88,10 +88,10 @@ Integration
 -----------
 
 You can get a huge productivity boost by integrating IKPdb with your software 
-of the framework you use.
+of the framework you use. Once integrated, the debugger will automaticaly opens
+an gives you all information required to debug each time an exception occurs.
 
-Once integrated, the debugger will automaticaly open an gives you all information
-requires to debug each time an exception occurs.
+<<Insert a screen copy>>
 
 Read the :doc:`integration_guide` here.
 
@@ -116,8 +116,6 @@ Dependencies
 ------------
 
 IKPdb has no external dependencies and we wish this to remain like that.
-
-
 
 Documentation contents:
 -----------------------
