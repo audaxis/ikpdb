@@ -13,7 +13,7 @@ long_description = (
     'Contributors\n'
     '############\n'
     + '\n' +
-    open('CONTRIBUTORS.txt').read()
+    open('AUTHORS').read()
     + '\n' +
     'Change history\n'
     '##############\n'
@@ -31,10 +31,10 @@ setup(
     py_modules = ['ikpdb'],
     #package_dir={'': 'src'},
     url='https://github.com/cmorisse/ikpdb',
-    license='MIT',
+    license='BSD',
     author='Cyril MORISSE',
     author_email='cmorisse@boxes3.net',
-    description="A hackable debugger built for network remote debugging and web/online IDE integration.",
+    description="A hackable CPython remote debugger designed for the Web and online IDE integration.",
     long_description = long_description,
     keywords = "debugger debug remote tcp",
     include_package_data=True,

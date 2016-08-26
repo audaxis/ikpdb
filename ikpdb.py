@@ -224,6 +224,7 @@ class IKPdbConnectionHandler:
         
         :param command: The command sent to the debugger client.
         :type command: str
+        
         :param _id: Unique id of the sent message. Right now, it's always `None`
                     for messages by debugger to client.
         :type _id: int
@@ -233,7 +234,7 @@ class IKPdbConnectionHandler:
         :type result: dict
         
         :param frames: contains the complete stack frames when debugger sends
-                       the `programBreak`message.
+                       the `programBreak` message.
         :type frames: list
 
         :param error_messages: A list of error messages the debugger client must
