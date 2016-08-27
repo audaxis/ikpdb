@@ -774,9 +774,7 @@ class IKPdb:
             local_vars = None
 
         try: 
-            result = eval(expression, 
-                          global_vars,
-                          local_vars)
+            result = eval(expression, global_vars, local_vars)
             result_type = IKPdbRepr(result)
             result_value = repr(result)
         except SyntaxError:
@@ -856,7 +854,7 @@ class IKPdb:
         return
 
     def setup_resume(self):
-        """Setup debugger to "resume" execution
+        """ Setup debugger to "resume" execution
         """
         self.frame_calling = None
         self.frame_stop = None
@@ -980,12 +978,15 @@ class IKPdb:
     def _tracer(self, frame, event, arg):
         if event == 'line':
             
+            # For the sake of performande, we inline following code in
+            # this method. 
+            # Code of these methods is still there for reference.
+            #
             #if self.should_stop_here(frame) or self.should_break_here(frame):
             #    self._line_tracer(frame)
             # return self._tracer
 
-            # should_stop_here() is inlined for performance.
-            # See original code and called method above
+            # should_stop_here() inlined version
             if self.pending_stop and (
                 (self.frame_calling and self.frame_calling==frame.f_back)
                         or frame==self.frame_stop
@@ -994,8 +995,8 @@ class IKPdb:
                         or self.should_break_here(frame)):
                 self._line_tracer(frame)
             
-            # self.should_break_here() is inlined too for performance 
-            c_file_name = self.canonic(frame.f_code.co_filename)
+            # self.should_break_here() inlined version 
+            c_file_name = self.canonic(frame.f_code.co_filename)  # TODO inline this too !!!
             if c_file_name in IKBreakpoint.breakpoints_files:
                 if IKBreakpoint.lookup_effective_breakpoint(c_file_name, 
                                                             frame.f_lineno,
@@ -1005,12 +1006,15 @@ class IKPdb:
         
         if event == 'call':
             if self.frame_beginning is None:  
-                # First call of dispatch since reset()
+                # As this is First call of dispatch since reset() we setup
+                # frame_beginning
                 self.frame_beginning = frame.f_back
-                # limited tracing of current thread has been enabled to allow
-                # self.frame_beginning to be set. 
+                
+                # limited tracing of current thread has been enabled in _runscript
+                # to allow self.frame_beginning to be set. That's done !
+                #
                 # Now depending on pending_stop and stop_at_first_statement 
-                # we set tracing globaly or  disable it completely by removing 
+                # we enable full tracing or disable it completely by removing 
                 # the tracer.
                 if self.stop_at_first_statement:
                     self.setup_step_into(frame, pure=True)
@@ -1099,7 +1103,7 @@ class IKPdb:
         a tuple of (error_message, break_number)
         """
         c_file_name = self.canonic(file_name)
-        import linecache # Import as late as possible
+        #import linecache # Import as late as possible
         line = linecache.getline(c_file_name, line_number)
         if not line:
             return 'Line %s:%d does not exist' % (c_file_name, line_number), None
@@ -1158,13 +1162,33 @@ class IKPdb:
             self.disable_tracing()
         return None
 
-    def run(self, cmd, globals=None, locals=None):
-        """ launch debugging of a git statuc"""
-        if globals is None:
-            import __main__
-            globals = __main__.__dict__
-        if locals is None:
-            locals = globals
+    def _runscript(self, filename):
+        """ Launchs debugged program execution using the execfile() builtin.
+            
+        We reset and setup the __main__ dict to allow the script to run
+        in __main__ namespace. This is required for imports from __main__ to 
+        run correctly.
+        
+        Note that this has the effect to wipe IKPdb's vars created at this point.
+        """
+        import __main__
+        __main__.__dict__.clear()
+        __main__.__dict__.update({"__name__"    : "__main__",
+                                  "__file__"    : filename,
+                                  "__builtins__": __builtins__,
+                                 })
+
+        self.mainpyfile = self.canonic(filename)
+        statement = 'execfile(%r)\n' % filename
+        
+        globals = __main__.__dict__
+        locals = globals
+
+        # When IKPdb sets tracing, a number of call and line events happens
+        # BEFORE debugger even reaches user's code (and the exact sequence of
+        # events depends on python version). So we take special measures to
+        # avoid stopping before we reach the main script (see reset(),
+        # _tracer() and _line_tracer() methods for details).
         self.reset()
         self.execution_started = True
 
@@ -1173,35 +1197,12 @@ class IKPdb:
         # first tracer "call" invocation.
         sys.settrace(self._tracer)
 
-        if not isinstance(cmd, types.CodeType):
-            cmd = cmd + '\n'
         try:
-            exec cmd in globals, locals
+            exec(statement, globals, locals)
         except IKPdbQuit:
             pass
         finally:
-            self.disable_tracing()
-
-    def _runscript(self, filename):
-        # The script has to run in __main__ namespace (or imports from
-        # __main__ will break).
-        # So we clear up the __main__ and set several special variables
-        # (this gets rid of IKPdb's globals and cleans old variables on start).
-        import __main__
-        __main__.__dict__.clear()
-        __main__.__dict__.update({"__name__"    : "__main__",
-                                  "__file__"    : filename,
-                                  "__builtins__": __builtins__,
-                                 })
-
-        # When IKPdb sets tracing, a number of call and line events happens
-        # BEFORE debugger even reaches user's code (and the exact sequence of
-        # events depends on python version). So we take special measures to
-        # avoid stopping before we reach the main script (see user_line and
-        # user_call for details).
-        self.mainpyfile = self.canonic(filename)
-        statement = 'execfile(%r)' % filename
-        self.run(statement)
+            self.disable_tracing()        
         
     def command_loop(self, run_script_event):
         """ return 1 to exit command_loop and resume execution 
