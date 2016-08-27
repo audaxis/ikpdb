@@ -806,8 +806,41 @@ class IKPdb:
         if disable_break:
             IKBreakpoint.restore_breakpoints_state(breakpoints_backup)
 
-        _logger.e_debug("evaluate(%s) => value = %s:%s | %s", expression, result_value, result_type, result)
+        _logger.e_debug("evaluate(%s) => value = %s:%s | %s", expression, 
+                                                              result_value, 
+                                                              result_type, 
+                                                              result)
         return result_value, result_type
+
+    def let_variable(self, frame_id, var_name, expression_value):
+        """ Let a frame's var with a value by building then eval a let 
+        expression with breakoints disabled.
+        """
+        breakpoints_backup = IKBreakpoint.backup_breakpoints_state()
+        IKBreakpoint.disable_all_breakpoints()
+
+        let_expression = "%s=%s" % (var_name, expression_value,)
+
+        eval_frame = ctypes.cast(frame_id, ctypes.py_object).value
+        global_vars = eval_frame.f_globals
+        local_vars = eval_frame.f_locals
+        try:
+            exec(let_expression, global_vars, local_vars)
+            error_message=""
+        except Exception as e:
+            t, result = sys.exc_info()[:2]
+            if isinstance(t, str):
+                result_type = t
+            else: 
+                result_type = str(t.__name__)
+            error_message = "%s: %s" % (result_type, result,)
+
+        IKBreakpoint.restore_breakpoints_state(breakpoints_backup)
+
+        _logger.e_debug("let_variable(%s) => %s", 
+                        let_expression, 
+                        error_message or 'succeed')
+        return error_message
 
     def setup_step_over(self, frame):
         """Setup debugger for a "stepOver"
@@ -1103,7 +1136,7 @@ class IKPdb:
         a tuple of (error_message, break_number)
         """
         c_file_name = self.canonic(file_name)
-        #import linecache # Import as late as possible
+        import linecache
         line = linecache.getline(c_file_name, line_number)
         if not line:
             return 'Line %s:%d does not exist' % (c_file_name, line_number), None
@@ -1259,7 +1292,7 @@ class IKPdb:
                 bp_number = args.get('breakpoint_number', None)
                 if bp_number is None:
                     result = {}
-                    msg = "changeBreakpointState() error: missing required "
+                    msg = "changeBreakpointState() error: missing required " \
                           "breakpointNumber parameter."
                     _logger.g_error("    "+msg)
                     error_messages = [msg]
@@ -1287,7 +1320,7 @@ class IKPdb:
                 bp_number = args.get('breakpoint_number', None)
                 if bp_number is None:
                     result = {}
-                    msg = "clearBreakpointState() error: missing required "
+                    msg = "clearBreakpointState() error: missing required " \
                           "breakpointNumber parameter."
                     _logger.g_error("    "+msg)
                     error_messages = [msg]
@@ -1327,19 +1360,17 @@ class IKPdb:
                 _logger.e_debug("setVariable(%s)", args)
                 error_messages = []
                 result = {}
-                sv_frame = ctypes.cast(args['frame'], ctypes.py_object).value
-                try:
-                    if args['name'] in sv_frame.f_locals:
-                        sv_frame.f_locals[args['name']] = eval(str(args['value']))
-                    else:
-                        sv_frame.f_globals[args['name']] = eval(str(args['value']))
-                    command_exec_status = 'ok'
-                except:
+                command_exec_status = 'ok'
+                err_message = self.let_variable(args['frame'], 
+                                                args['name'], 
+                                                args['value'])
+                if err_message:
                     command_exec_status = 'error'
-                    msg = "setVariable error: failed to let %s to var with id: %s" % (args['id'], args['value'],)
+                    msg = "setVariable(%s=%s) failed with error: %s" % (args['name'], 
+                                                                        args['value'],
+                                                                        err_message)
                     error_messages = [msg]
                     _logger.e_error(msg)
-                command_exec_status = 'ok'
                 remote_client.reply(obj, 
                                     result, 
                                     command_exec_status=command_exec_status,
