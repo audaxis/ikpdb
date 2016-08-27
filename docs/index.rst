@@ -32,6 +32,8 @@ Javascript editor / IDE (eg. Visual Studio Code, Cloud9, Atom).
 Please note that IKPdb supports only CPython 2.7, CPython 3 support is the next 
 step.
 
+.. _installation:
+
 Installation
 ------------
 
@@ -123,6 +125,7 @@ Documentation contents:
 .. toctree::
    :maxdepth: 2
    
+   ref:`installation`
    cloud9_user_guide
    integration_guide
    api
