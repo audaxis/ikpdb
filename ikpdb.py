@@ -1259,7 +1259,8 @@ class IKPdb:
                 bp_number = args.get('breakpoint_number', None)
                 if bp_number is None:
                     result = {}
-                    msg = "changeBreakpointState() error: missing required breakpointNumber parameter."
+                    msg = "changeBreakpointState() error: missing required "
+                          "breakpointNumber parameter."
                     _logger.g_error("    "+msg)
                     error_messages = [msg]
                     command_exec_status = 'error'
@@ -1286,7 +1287,8 @@ class IKPdb:
                 bp_number = args.get('breakpoint_number', None)
                 if bp_number is None:
                     result = {}
-                    msg = "clearBreakpointState() error: missing required breakpointNumber parameter."
+                    msg = "clearBreakpointState() error: missing required "
+                          "breakpointNumber parameter."
                     _logger.g_error("    "+msg)
                     error_messages = [msg]
                     command_exec_status = 'error'
