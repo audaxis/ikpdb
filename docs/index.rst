@@ -13,21 +13,22 @@ Welcome to IKPdb's documentation!
 
 A hackable CPython remote debugger designed for the Web.
 
-Features:
----------
+Features
+--------
 
 IKPdb supports:
 
 * Debugging of multithreaded programs
 * Conditional breakpoints
 * Variables hot modifications
+* :ref:`turbo-mode`
 
-IKPdb has no integrated GUI ; it's only interface is a tcp protocol.
+IKPdb has no integrated GUI ; it's only interface is a TCP protocol.
 
 IKPdb client GUI reference implementation is `Cloud9 Online IDE <https://c9.io/?redirect=0>`_
 
-IKPdb TCP protocol - based on JSON - is designed for easy integration with latest generation of 
-Javascript editor / IDE (eg. Visual Studio Code, Cloud9, Atom).
+IKPdb TCP protocol - based on JSON - is designed for easy integration with latest
+generation of Javascript editor / IDE (eg. Visual Studio Code, Cloud9, Atom).
 
 Please note that IKPdb supports only CPython 2.7, CPython 3 support is the next 
 step.
@@ -54,12 +55,52 @@ Git clone from the official repository then install with one of these:
    # If you want latest version from a branch
    $ pip install git+git://github.com/cmorisse/ikpdb.git@1.0.x  # 1.0.x is the branch name
 
+.. _getting-started:
+
 Getting started
 ---------------
 
-If you work with Cloud9, check these instructions: :doc:`IKPdb User Guide for Cloud9 <cloud9_user_guide>`.
+.. _getting-started-with-cloud9:
 
-Else, IKPdb is a debug server you launch with:
+Getting started with Cloud9
+___________________________
+
+1. Create a new file with a few statements and save it as "debug_me.py".
+
+You can copy / paste this snippet.
+
+.. code-block:: python
+
+   print "I want to try Python debugging with IKPdb in Cloud9."
+   print "I step over onto this line."
+
+2. Set a breakpoint on the first line by clicking in the left margin until a 
+red circle appears.
+
+**Ignore the red check button on line 1 ; as it is relevant only for Django development.**
+
+.. image:: index_pic1__py_snippet.png
+
+3. Click on the Run button at the Top menu right-hand side.
+
+.. image:: index_pic1__py_snippet.png
+
+The debugger is now open on the breakpoint you defined at step 2.
+
+.. image:: index_pic3__debugger_opened.png
+
+Now you can:
+
+* Play with the debugger
+* Read :doc:`IKPdb User Guide for Cloud9 <cloud9_user_guide>` to get information about IKPdb and Python debugging.
+* Read the `Cloud9 debugging documentation <https://docs.c9.io/docs/debugging-your-code>`_ to discover all Cloud9 features related to debugging.
+
+.. _getting-started-without-cloud9:
+
+Getting started without Cloud9
+______________________________
+
+IKPdb is a debug server you launch with:
 
 .. code-block:: bash
 
@@ -68,7 +109,7 @@ Else, IKPdb is a debug server you launch with:
    [IKPdb-g] 05:04:40,690937 - INFO - IKPdb listening on 127.0.0.1:15470
    
 This command starts debugging of to_debug.py. IKPdb is listening for commands 
-on localhst port 15470 (15470 is default port).
+on localhost port 15470 (15470 is default port).
 
 IKPdb has a --help command that shows all available options.
 
@@ -76,15 +117,30 @@ IKPdb has a --help command that shows all available options.
 
    $ python -m ikpdb --help
 
-At that point you need an IKPdp client. You can either take a look at the 
-`Cloud9 Online IDE <https://c9.io/?redirect=0>`_ which is the reference client 
-or start hacking your own client.
+At that point you need an IKPdp client. For now, the only available client is the `Cloud9 Online IDE <https://c9.io/?redirect=0>`_.
 
-For that you can use this starting material:
+But you can start hacking your own client. For that you can use this starting material:
 
 * :doc:`protocol`
 * `IKPdb Cloud9 client source code <https://github.com/cmorisse/c9.ide.run.debug.ikpdb>`_
 * `IKPdb source code <https://github.com/cmorisse/ikpdb>`_
+
+
+Source files mapping
+--------------------
+
+IKPdb exchanges file names with his client. When it sends a file name, IKPdb always uses full path.
+But some debuggers client send relative path (when setting breakpoints for example).
+In that case, IKPdb tries to resolve the file's full path using it's *"working directory"* as a base folder.
+
+IKPdb's working directory can be defined:
+
+* Implicitly ; working directoru is set to the debugged program's current directory.
+* Explictly ; using the **--ikpdb-working-directory** command line parameter
+
+You can ask IKPdb to display it's working add a --ikpdb-log=g command line parameter 
+in the runner.
+
 
 Integration
 -----------
@@ -117,15 +173,14 @@ Please feel free to file an issue on the project's Github bug tracker if you:
 Dependencies
 ------------
 
-IKPdb has no external dependencies and we wish this to remain like that.
+IKPdb has no external dependencies (and we wish this to remain like that).
 
-Documentation contents:
------------------------
+Other documentation content
+---------------------------
 
 .. toctree::
    :maxdepth: 2
    
-   ref:`installation`
    cloud9_user_guide
    integration_guide
    api
