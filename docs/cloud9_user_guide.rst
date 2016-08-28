@@ -95,16 +95,16 @@ The runner you selected is now opened in an editor as shown on *Figure 3*.
 Here you can modify:
 
 * *Line 5* with the full path of you python interpreter, if you use virtualenv.
-* *Line 8 and 21" if you need to modify IKPdb's network port.
+* *Line 8 and 21* if you need to modify IKPdb's network port.
 
 
 Source files mapping
 ____________________
 
 On Cloud9, IKPd working directory is set to Cloud9 workspace folder.
-If you create Custom runner do do the same.
+If you create Custom runner don't forget to do the same.
 
-See :ref:`source-file-mapping` for more information on this subject.
+See :ref:`source-files-mapping` for more information on this subject.
 
 
 Debugger usage instructions
