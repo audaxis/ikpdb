@@ -98,6 +98,15 @@ Here you can modify:
 * *Line 8 and 21" if you need to modify IKPdb's network port.
 
 
+Source files mapping
+____________________
+
+On Cloud9, IKPd working directory is set to Cloud9 workspace folder.
+If you create Custom runner do do the same.
+
+See :ref:`source-file-mapping` for more information on this subject.
+
+
 Debugger usage instructions
 ---------------------------
 
@@ -126,3 +135,8 @@ Tracing is reenabled when:
 * a non managed exception occurs in the debugged program
 * a managed exception occurs in a debugged program's exception manager which explicitly launchs IKPdb (see: **TODO: IKPdb integration**)
 
+
+
+
+
+IKPdb exchanges file names with his client. When it sends a file name, IKPdb always uses full path.

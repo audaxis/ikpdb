@@ -25,7 +25,7 @@ IKPdb supports:
 
 IKPdb has no integrated GUI ; it's only interface is a TCP protocol.
 
-IKPdb client GUI reference implementation is `Cloud9 Online IDE <https://c9.io/?redirect=0>`_
+**IKPdb client GUI reference implementation is `Cloud9 Online IDE <https://c9.io/?redirect=0>`_**
 
 IKPdb TCP protocol - based on JSON - is designed for easy integration with latest
 generation of Javascript editor / IDE (eg. Visual Studio Code, Cloud9, Atom).
@@ -126,19 +126,22 @@ But you can start hacking your own client. For that you can use this starting ma
 * `IKPdb source code <https://github.com/cmorisse/ikpdb>`_
 
 
+.. _source-files-mapping:
+
 Source files mapping
 --------------------
 
 IKPdb exchanges file names with his client. When it sends a file name, IKPdb always uses full path.
-But some debuggers client send relative path (when setting breakpoints for example).
+But some debuggers client sends relative paths (when setting breakpoints for example).
 In that case, IKPdb tries to resolve the file's full path using it's *"working directory"* as a base folder.
+If it fails, IKPdb sends a "FileMappingError:".
 
 IKPdb's working directory can be defined:
 
-* Implicitly ; working directoru is set to the debugged program's current directory.
+* Implicitly ; working directory is set to the debugged program's current directory.
 * Explictly ; using the **--ikpdb-working-directory** command line parameter
 
-You can ask IKPdb to display it's working add a --ikpdb-log=g command line parameter 
+You can ask IKPdb to display it's working add a --ikpdb-log=G command line parameter 
 in the runner.
 
 
