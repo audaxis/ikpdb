@@ -101,8 +101,8 @@ Here you can modify:
 Source files mapping
 ____________________
 
-On Cloud9, IKPd working directory is set to Cloud9 workspace folder.
-If you create Custom runner don't forget to do the same.
+On Cloud9, IKPdb working directory is set to Cloud9 workspace folder.
+If you create a custom *Runner* don't forget to do the same.
 
 See :ref:`source-files-mapping` for more information on this subject.
 

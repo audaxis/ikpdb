@@ -1465,12 +1465,10 @@ def set_trace(frame=None):
 def post_mortem(exc_info):
     """ Breaks on an exception and send all execution information to the debugger 
     client. 
-    If no exc_info is given try get it from sys.exc_info(). 
-    If no exception is currently handled, break at caller.
-    
+
     This is useful for integrating with systems that manages Exceptions. Using 
-    this function systems can set a developer mode where unhandled exceptions 
-    are sente to the developer.
+    this function you can setup a developer mode where unhandled exceptions 
+    are sent to the developer.
     
     :param exc_info: information about the exception to break on.
     :type exc_info: tuple

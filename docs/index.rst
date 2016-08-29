@@ -25,7 +25,7 @@ IKPdb supports:
 
 IKPdb has no integrated GUI ; it's only interface is a TCP protocol.
 
-**IKPdb client GUI reference implementation is `Cloud9 Online IDE <https://c9.io/?redirect=0>`_**
+**IKPdb client GUI reference implementation is** `Cloud9 Online IDE <https://c9.io/?redirect=0>`_
 
 IKPdb TCP protocol - based on JSON - is designed for easy integration with latest
 generation of Javascript editor / IDE (eg. Visual Studio Code, Cloud9, Atom).
@@ -65,7 +65,8 @@ Getting started
 Getting started with Cloud9
 ___________________________
 
-1. Create a new file with a few statements and save it as "debug_me.py".
+1. Create a Workspace using the Python template
+2. Create a new file with a few statements and save it as "debug_me.py".
 
 You can copy / paste this snippet.
 
@@ -74,26 +75,26 @@ You can copy / paste this snippet.
    print "I want to try Python debugging with IKPdb in Cloud9."
    print "I step over onto this line."
 
-2. Set a breakpoint on the first line by clicking in the left margin until a 
+3. Set a breakpoint on the first line by clicking in the left margin until a 
 red circle appears.
 
 **Ignore the red check button on line 1 ; as it is relevant only for Django development.**
 
 .. image:: index_pic1__py_snippet.png
 
-3. Click on the Run button at the Top menu right-hand side.
+4. Click on the Run button at the Top menu right-hand side.
 
-.. image:: index_pic1__py_snippet.png
+.. image:: index_pic2__run_button.png
 
-The debugger is now open on the breakpoint you defined at step 2.
+The debugger is now open on the breakpoint you defined at step 3.
 
 .. image:: index_pic3__debugger_opened.png
 
 Now you can:
 
 * Play with the debugger
-* Read :doc:`IKPdb User Guide for Cloud9 <cloud9_user_guide>` to get information about IKPdb and Python debugging.
 * Read the `Cloud9 debugging documentation <https://docs.c9.io/docs/debugging-your-code>`_ to discover all Cloud9 features related to debugging.
+* Read :doc:`IKPdb User Guide for Cloud9 <cloud9_user_guide>` to get information about IKPdb and Python debugging.
 
 .. _getting-started-without-cloud9:
 
@@ -131,19 +132,19 @@ But you can start hacking your own client. For that you can use this starting ma
 Source files mapping
 --------------------
 
-IKPdb exchanges file names with his client. When it sends a file name, IKPdb always uses full path.
-But some debuggers client sends relative paths (when setting breakpoints for example).
-In that case, IKPdb tries to resolve the file's full path using it's *"working directory"* as a base folder.
-If it fails, IKPdb sends a "FileMappingError:".
+IKPdb exchanges file names with his debugger clients. When it sends a file name, IKPdb 
+always uses full path. But some debuggers client sends relative paths 
+(when setting breakpoints for example). In that case, IKPdb tries to resolve the
+file's full path using it's *"working directory"* as a base folder. If it fails, 
+IKPdb sends a "FileMappingError:".
 
 IKPdb's working directory can be defined:
 
 * Implicitly ; working directory is set to the debugged program's current directory.
 * Explictly ; using the **--ikpdb-working-directory** command line parameter
 
-You can ask IKPdb to display it's working add a --ikpdb-log=G command line parameter 
-in the runner.
-
+To ask IKPdb to display it's working directory add a **--ikpdb-log=G** command 
+line parameter in the runner.
 
 Integration
 -----------
@@ -152,7 +153,7 @@ You can get a huge productivity boost by integrating IKPdb with your software
 of the framework you use. Once integrated, the debugger will automaticaly opens
 an gives you all information required to debug each time an exception occurs.
 
-<<Insert a screen copy>>
+.. image:: index_pic4__demo_exception.png
 
 Read the :doc:`integration_guide` here.
 
@@ -186,7 +187,6 @@ Other documentation content
    
    cloud9_user_guide
    integration_guide
-   api
    protocol
    license
 
