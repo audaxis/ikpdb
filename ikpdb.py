@@ -366,7 +366,7 @@ def IKPdbRepr(t):
     return str(t_type).split(' ')[1][1:-2]
 
 class IKBreakpoint(object):
-    """ IKBreakpoint implements IKPdb Breakpoints. 
+    """ IKBreakpoint implements and manages IKPdb Breakpoints. 
     
     Basically a breakpoint is described by:
     
@@ -1451,42 +1451,68 @@ class IKPdb(object):
                                 IKBreakpoint.breakpoints_by_number)
 
         
-def set_trace(frame=None):
+def set_trace(a_frame=None):
     """ Breaks on the line that invoked this function or at given frame.
-    """
-    global ikpdb
-    if not ikpdb:
-        raise Exception("IKPdb must be launched before calling ikpd.set_trace().")
+    User can then resume execution.
+    
+    To call set_trace() use:
+    
+    .. code-block:: python
 
-    if frame is None:
-        frame = sys._getframe().f_back
-    ikpdb._line_tracer(frame)
+        import ikpdb ; ikpdb.set_trace()
+
+    :param a_frame: The frame at which to break on.
+    :type a_frame: frame
+    
+    :return: An error message or None is everything went fine.
+    :rtype: str or None
+
+    """
+    if not ikpdb:
+        return "Error: IKPdb must be launched before calling ikpd.set_trace()."
+
+    if a_frame is None:
+        a_frame = sys._getframe().f_back
+    ikpdb._line_tracer(a_frame)
+    return None
 
 def post_mortem(trace_back=None, exc_info=None):
     """ Breaks on a traceback and send all execution information to the debugger 
     client. If the interpreter is handling an exception at this traceback, 
     exception information is sent to _line_tracer() which will transmit it to 
     the debugging client.
-    Caller can also pass an exc_info that will be used to extract exception
-    information. if passed exc_info has precedence over traceback.
+    Caller can also pass an *exc_info* that will be used to extract exception
+    information. If passed exc_info has precedence over traceback.
 
-    This method is useful for integrating with systems that manages Exceptions. 
+    This method is useful for integrating with systems that manage exceptions. 
     Using it, you can setup a developer mode where unhandled exceptions 
     are sent to the developer.
     
-    Once user resume execution, control is return to caller. IKPdb is 
+    Once user resumes execution, control is returned to caller. IKPdb is 
     just used to "pretty" display the execution environement.
     
-    :param trace_back: the traceback at which to break oninformation about the exception to break on.
-    :type trace_back: tuple
+    To call post_mortem() use:
     
-    :return: an error message or None is everything went fine.
-    :rtype: str
+    .. code-block:: python
+
+        import ikpdb
+        ...
+        ikpdb.postmortem(any_traceback) 
+    
+    
+    :param trace_back: The traceback at which to break on.
+    :type trace_back: traceback
+    
+    :param exc_info: Complete description of the raised Exception as 
+                     returned by sys.exc_info.
+    :type exc_info: tuple
+    
+    :return: An error message or None is everything went fine.
+    :rtype: str or None
     """
     if not ikpdb:
-        return "IKPdb must be launched before calling ikpd.post_mortem()."
+        return "Error: IKPdb must be launched before calling ikpd.post_mortem()."
     
-
     if exc_info:
         trace_back = exc_info[2]
     elif trace_back and not exc_info:

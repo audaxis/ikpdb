@@ -188,6 +188,7 @@ Other documentation content
    cloud9_user_guide
    integration_guide
    protocol
+   api
    license
 
 
