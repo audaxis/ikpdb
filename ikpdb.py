@@ -45,7 +45,7 @@ __version__ = "1.0.0-alpha"
 # _logger.{{domain}}_{{level}}(*args)
 # eg: _logger.x_debug("error in %s", the_error)
 #
-class ANSIColors:
+class ANSIColors(object):
     MAGENTA = '\033[95m'    
     BLUE = '\033[94m'       # debug
     GREEN = '\033[92m'      # info
@@ -69,7 +69,7 @@ class MetaIKPdbLogger(type):
             return cls._log(domain, level, *args, **kwargs)
         return wrapper
 
-class IKPdbLogger:
+class IKPdbLogger(object):
     """ IKPdb implements it's own logging system to:
 
     - avoid problem while debugging programs that reconfigure logging system 
@@ -180,7 +180,7 @@ _logger = IKPdbLogger
 class IKPdbConnectionError(Exception):
     pass
 
-class IKPdbConnectionHandler:
+class IKPdbConnectionHandler(object):
     """ IKPdbConnectionHandler manages a connection with a remote client once
     it is established.
     
@@ -365,7 +365,7 @@ def IKPdbRepr(t):
     t_type = type(t)
     return str(t_type).split(' ')[1][1:-2]
 
-class IKBreakpoint:
+class IKBreakpoint(object):
     """ IKBreakpoint implements IKPdb Breakpoints. 
     
     Basically a breakpoint is described by:
@@ -526,7 +526,7 @@ class IKBreakpoint:
         cls.update_active_breakpoint_flag()
         return
 
-class IKPdb:
+class IKPdb(object):
     """ Main debugger class.
 
     :param skip: reserved for future use
@@ -592,7 +592,7 @@ class IKPdb:
         return c_file_name
 
     def lookup_module(self, file_name):
-        """ Translate a (possibly incomplete) file or module name into an 
+        """ translate a (possibly incomplete) file or module name into an 
         absolute file name.
         """
         _logger.p_debug("lookup_module(%s) with os.getcwd()=>%s", file_name, os.getcwd())
@@ -617,7 +617,7 @@ class IKPdb:
         if os.path.isabs(file_name):
             return file_name
         
-        # Cand we find the file in system path
+        # Can we find the file in system path
         for dir_name in sys.path:
             while os.path.islink(dir_name):
                 dir_name = os.readlink(dir_name)
@@ -667,7 +667,7 @@ class IKPdb:
             return count
 
     def extract_object_properties(self, o):
-        """Extracts all properties from an object (eg. f_locals, f_globals, 
+        """ extracts all properties from an object (eg. f_locals, f_globals, 
         user dict, instance ...) and returns them as an array of variables
         """
         _logger.e_debug("extract_object_properties(%s)", o)
@@ -718,7 +718,7 @@ class IKPdb:
             
 
     def dump_frames(self, frame):
-        """Dumps frames chain in a representation suitable for serialization 
+        """ dumps frames chain in a representation suitable for serialization 
            and remote (debugger) client usage.
         """
         current_tread = threading.currentThread()
