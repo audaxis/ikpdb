@@ -1462,29 +1462,45 @@ def set_trace(frame=None):
         frame = sys._getframe().f_back
     ikpdb._line_tracer(frame)
 
-def post_mortem(exc_info):
-    """ Breaks on an exception and send all execution information to the debugger 
-    client. 
+def post_mortem(trace_back=None, exc_info=None):
+    """ Breaks on a traceback and send all execution information to the debugger 
+    client. If the interpreter is handling an exception at this traceback, 
+    exception information is sent to _line_tracer() which will transmit it to 
+    the debugging client.
+    Caller can also pass an exc_info that will be used to extract exception
+    information. if passed exc_info has precedence over traceback.
 
-    This is useful for integrating with systems that manages Exceptions. Using 
-    this function you can setup a developer mode where unhandled exceptions 
+    This method is useful for integrating with systems that manages Exceptions. 
+    Using it, you can setup a developer mode where unhandled exceptions 
     are sent to the developer.
     
-    :param exc_info: information about the exception to break on.
-    :type exc_info: tuple
+    Once user resume execution, control is return to caller. IKPdb is 
+    just used to "pretty" display the execution environement.
+    
+    :param trace_back: the traceback at which to break oninformation about the exception to break on.
+    :type trace_back: tuple
+    
+    :return: an error message or None is everything went fine.
+    :rtype: str
     """
-    global ikpdb
     if not ikpdb:
-        raise Exception("IKPdb must be launched before calling ikpd.post_mortem().")
-        
-    if exc_info == (None, None, None):
-        raise Exception("Missing exc_info parameter when calling ikpdb.post_mortem()")
-        
-    pm_traceback = exc_info[2]
+        return "IKPdb must be launched before calling ikpd.post_mortem()."
+    
+
+    if exc_info:
+        trace_back = exc_info[2]
+    elif trace_back and not exc_info:
+        if sys.exc_info()[2] == trace_back:
+            exc_info = sys.exc_info()
+    else:
+        return "missing parameter trace_back or exc_info"
+
+    pm_traceback = trace_back
     while pm_traceback.tb_next:
         pm_traceback = pm_traceback.tb_next      
     ikpdb._line_tracer(pm_traceback.tb_frame, exc_info=exc_info)
     _logger.g_info("Post mortem processing finished.")
+    return None
 
 ##
 # Signal Handler to properly close socket connection
