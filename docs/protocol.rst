@@ -125,23 +125,84 @@ For detail about frames and exception, take a look at :func:`~ikpdb.IKPdb.dump_f
 Messages string
 _______________
 
-IKPdp sends 3 king of messages to clients:  warning, info and error. 
+IKPdp sends 3 king of messages to clients:  *warning*, *info* and *error*. 
 Usage of these messages is left to the client implementation. For example in Cloud9:
 
-* info_messages are displayed using console.log()
-* warning_messages are displayed using notification bubbles
-* error_messages are displayed in a red banner at the top of the window (using cloud9 showError API)
+* *info_messages* are displayed using console.log()
+* *warning_messages* are displayed using notification bubbles
+* *error_messages* are displayed in a red banner at the top of the window (using cloud9 showError API)
 
 Debugged program execution status
 _________________________________
 
 All messages related to debugged program execution modifications add an 
-"executionStatus" key in the result dict.
+*executionStatus* key in the result dict.
 
-Possible values for executionStatus are:
+Possible values for *executionStatus* are:
 
-* stopped (break or exception)
-* running
-* terminated 
+* "stopped" (break or exception)
+* "running"
+* "terminated" 
 
+IKPdb command list summary
+--------------------------
+
+Here is the list (in no particular order) of commands supported by IKPdb.
+For detailed parameters description, please look have a look at IKPdb code
+especially :func:`~ikpdb.IKPdb.command_loop` and :py:func:`ikpdb.main`.
+
+In next table *Way* is expressed from IKPdb point of view. "in" means received 
+by IKPdb (and sent by client).
+
++-------------------------+-----+-------------------------------------+-------------------+
+| Command                 | Way | Description                         | Update            |
+|                         |     |                                     | executionStatus?  |
++=========================+=====+=====================================+===================+
+| "changeBreakpointState" | in  | Ask IKPdb to modify an existing     |                   |
+|                         |     | breakpoint                          |                   |
++-------------------------+-----+-------------------------------------+-------------------+
+| "clearBreakpoint"       | in  | Ask IKPdb to delete a breakpoint.   |                   |
++-------------------------+-----+-------------------------------------+-------------------+
+| "evaluate"              | in  | Evaluate an expression or statement | Yes               |
+|                         |     | in the context of debugged program  |                   |
+|                         |     | and return result.                  |                   |
++-------------------------+-----+-------------------------------------+-------------------+
+| "getBreakpoints"        | in  | Ask IKPdb to return a list of all   |                   |
+|                         |     | defined breakpoints                 |                   |
++-------------------------+-----+-------------------------------------+-------------------+
+| "getProperties"         | in  | Ask IKPdb to the properties or      | Yes               |
+|                         |     | members of a compound variable.     |                   |
+|                         |     | This allows client to lay load huge |                   |
+|                         |     | variables or dict                   |                   |
++-------------------------+-----+-------------------------------------+-------------------+
+| "programBreak"          | out | Sent by IKPdb when debugged program | Yes: "stoped"     |
+|                         |     | has reached a breakpoint or raised  |                   |
+|                         |     | an exception.                       |                   |
++-------------------------+-----+-------------------------------------+-------------------+
+| "programEnd"            | out | Sent when debugged program exited   | Yes: "Terminated" |
+|                         |     | contains the exit code if any.      |                   |
++-------------------------+-----+-------------------------------------+-------------------+
+| "resume"                | in  | Sent by the client to resume        | Yes: "Running"    |
+|                         |     | execution of a paused debugged      |                   |
+|                         |     | program.                            |                   |
++-------------------------+-----+-------------------------------------+-------------------+
+| "runScript"             | in  | Start execution of debugged program.| Yes               |
++-------------------------+-----+-------------------------------------+-------------------+
+| "setVariable"           | in  | Ask IKPdb to modify value of a stack| Yes               |
+|                         |     | frame variable.                     |                   |
++-------------------------+-----+-------------------------------------+-------------------+
+| "stepOver"              | in  |                                     | Yes: "Running"    |
++-------------------------+-----+-------------------------------------+-------------------+
+| "setBreakpoints"        | in  | Ask IKPdb to set a breakpoint.      |                   |
++-------------------------+-----+-------------------------------------+-------------------+
+| "stepInto"              | in  |                                     | Yes: "Running"    |
++-------------------------+-----+-------------------------------------+-------------------+
+| "stepOut"               | in  |                                     | Yes: "Running"    |
++-------------------------+-----+-------------------------------------+-------------------+
+| "suspend"               | in  | Sent by the client, if user         | Yes: "Running"    |
+|                         |     | requests to pause debugged program. |                   |
++-------------------------+-----+-------------------------------------+-------------------+
+| "welcome"               | out | A welcome message with IKPDb        |                   |
+|                         |     | version sent at client connection.  |                   |
++-------------------------+-----+-------------------------------------+-------------------+
 

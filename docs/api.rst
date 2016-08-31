@@ -16,7 +16,9 @@ IKPdb *"private"* API consists of:
 * 1 exception:
     * :class:`ikpdb.IKPdbQuit`
 * 1 helper:
-    * :function:`ikpdb.IKPdbRepr` returns a *repr* suitable for clients
+    * :func:`ikpdb.IKPdbRepr` returns a *repr* suitable for clients
+
+and of course a :func:`ikpdb.main`
 
 Classes
 -------
@@ -39,4 +41,9 @@ Helpers
 -------
 
 .. autofunction:: ikpdb.IKPdbRepr
+
+Main
+----
+
+.. autofunction:: ikpdb.main
 
