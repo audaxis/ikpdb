@@ -122,4 +122,26 @@ Event messages sent by IKPdb follow this structure:
 
 For detail about frames and exception, take a look at :func:`~ikpdb.IKPdb.dump_frames`.
 
+Messages string
+_______________
+
+IKPdp sends 3 king of messages to clients:  warning, info and error. 
+Usage of these messages is left to the client implementation. For example in Cloud9:
+
+* info_messages are displayed using console.log()
+* warning_messages are displayed using notification bubbles
+* error_messages are displayed in a red banner at the top of the window (using cloud9 showError API)
+
+Debugged program execution status
+_________________________________
+
+All messages related to debugged program execution modifications add an 
+"executionStatus" key in the result dict.
+
+Possible values for executionStatus are:
+
+* stopped (break or exception)
+* running
+* terminated 
+
 
