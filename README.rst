@@ -8,7 +8,7 @@ Features
 * Debugging of multithreaded programs
 * Conditional breakpoints
 * Variables hot modifications
-* :ref:`turbo-mode`
+* "Turbo mode"
 * easy integration in frameworks
 
 Installation
@@ -36,9 +36,7 @@ Git clone from the official repository then install with one of these:
 Getting started
 ---------------
 
-Cloud9 is our debugger reference implementation so first try with `Cloud9 <https://c9.io/>`_.
-
-So head to `Cloud9 <https://c9.io/>`_ and create an account then:
+Cloud9 is our debugger reference implementation so head to `Cloud9 <https://c9.io/>`_, create an account there then:
 
 1. Create a Workspace using the Python template
 2. Create a new file with a few statements and save it as "debug_me.py".
@@ -88,7 +86,7 @@ License
 -------
 
 ``IKPdb`` is licensed under a FreeBSD License.
-See :doc:`IKPdb licence<LICENCE>`
+See the Licence paragraph in the documentation or the LICENSE file in this repository.
 
 Source code
 ------------
