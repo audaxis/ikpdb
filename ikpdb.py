@@ -1139,7 +1139,7 @@ class IKPdb(object):
         import linecache
         line = linecache.getline(c_file_name, line_number)
         if not line:
-            return 'Line %s:%d does not exist' % (c_file_name, line_number), None
+            return "Line %s:%d does not exist." % (c_file_name, line_number), None
         bp = IKBreakpoint(c_file_name, line_number, condition, enabled)
         if self.pending_stop or IKBreakpoint.any_active_breakpoint:
             self.enable_tracing()
@@ -1273,7 +1273,7 @@ class IKPdb(object):
                                                      enabled=enabled)
                 error_messages = []
                 if err:
-                    _logger.g_error("setBreakpoint error: %s", r)
+                    _logger.g_error("setBreakpoint error: %s", err)
                     error_messages = [err]
                     result = {}
                     command_exec_status = 'error'
