@@ -1,137 +1,98 @@
-=====
-IKPdb
-=====
+A hackable CPython remote debugger designed for integration with the latest generation of Javascript editor / IDE (eg. Cloud9, Atom, VS Code)
+=============================================================================================================================================
 
-IKPdb is a python (CPython 2.7) debugger built to work with online IDE (eg. cloud9)
 
-IKPdb supports only CPython 2.7 (for now).
+Features
+--------
 
-IKPDb have a decent feature set:
-
-* Basic Multithreading Support
-* Variable inspection and hot modifications
-* Conditional breakoints
-* And of course, Step over, Step in, Step out
-
-You can see it in action and test it using Cloud9 (http://c9.io) using the ikpdb Cloud 9 plugin.
-
---------------------
-Content of this file
---------------------
-
-- Licence
-- Installation
-- Usage
-- 
-
-License
-=======
-
-IKPdb is licensed under MIT License. See LICENCE.txt
+* Debugging of multithreaded programs
+* Conditional breakpoints
+* Variables hot modifications
+* :ref:`turbo-mode`
+* easy integration in frameworks
 
 Installation
-============
+------------
 
-From pypi
----------
+.. code-block:: bash
 
-Use pip or easy_install:
+   $ pip install ikpdb
 
-::
+Installation from sources
+_________________________
 
-    $ pip install ikpdb 
-    or
-    $ easy_install ikpdb 
+Git clone from the official repository then install with one of these:
 
-From source
------------
+.. code-block:: bash
 
-Git clone from the official repository then install with:
+   # If you want a specific version
+   $ pip install git+git://github.com/cmorisse/ikpdb.git@1.0.1  # 1.0.1 is a tag
 
-::
+   # If you want latest version from a branch
+   $ pip install git+git://github.com/cmorisse/ikpdb.git@1.0.x  # 1.0.x is the branch name
 
-    python setup.py install
-    
-Or
+.. _getting-started:
 
-::
-    $ pip install git+git://github.com/cmorisse/ikpdb.git@v0.1.0  # tag
-    or
-    $ pip install git+git://github.com/cmorisse/ikpdb.git@newbranch  # or branch
+Getting started
+---------------
 
-   
+Cloud9 is our debugger reference implementation so first try with `Cloud9 <https://c9.io/>`_.
 
-Usage
-=====
+So head to `Cloud9 <https://c9.io/>`_ and create an account then:
 
-IKPdb is a remote debugger whose only interface is a TCP Socket.
-Once launched, it waits for a TCP connection on a TCP Port.
-A remote debugger GUI can then connect to the debugger to send it command and get results.
+1. Create a Workspace using the Python template
+2. Create a new file with a few statements and save it as "debug_me.py".
 
+You can copy / paste this snippet.
 
-Launch parameters
------------------
+.. code-block:: python
 
-Adress, port, script to debug, logging verbosity
-TO DO complete
+   #coding: utf-8
+   print "I want to try Python debugging with IKPdb in Cloud9."
+   print "I step over onto this line."
 
+3. Set a breakpoint on the first line by clicking in the left margin until a 
+red circle appears.
 
-IKPdb protocol description
-==========================
+**Ignore the red check button on line 1 ; as it is relevant only for Django development.**
 
-...
+.. image:: docs/index_pic1__py_snippet.png
 
-Post mortem Integration with Odoo
-=====================
+4. Click on the Run button at the Top menu right-hand side.
 
-IKPdb can be integrated with Odoo to automaticaly open the debugger on 
-the line that raised an unhandled exception.
+.. image:: docs/index_pic2__run_button.png
 
-For that, you must:
-* modify parts/odoo/openerp/tools/debugger.py like that:
+The debugger is now open on the breakpoint you defined at step 3.
 
-::
-    # -*- coding: utf-8 -*-
-    # Copyright: 2014 - OpenERP S.A. <http://openerp.com>
-    import types
+.. image:: docs/index_pic3__debugger_opened.png
 
-    def post_mortem(config, info):
-        if config['debug_mode'] and isinstance(info[2], types.TracebackType):
-            try:
-                import pudb as pdb
-            except ImportError:
-                try:
-                    import ipdb as pdb
-                except ImportError:
-                    try:
-                        import ikpdb as pdb
-                    except ImportError:
-                        import pdb
-            pdb.post_mortem(info[2])
-            
-* launch odoo with the --debug command line parameter
-    
+Now you can:
 
-Next level title
-----------------
+* Play with the debugger
+* Read the `Cloud9 debugging documentation <https://docs.c9.io/docs/debugging-your-code>`_ to discover all Cloud9 features related to debugging.
+* Read `IKPdb documentation <https://ikpdb.readthedocs.io/>`_ to get information about IKPdb and Python debugging.
 
-bla
-bla
+Documentation
+-------------
+
+https://ikpdb.readthedocs.io/
 
 
-Next level title
-................
+Requirements
+------------
 
-bla
-bla
-
+CPython 2.7
 
 
+License
+-------
 
-Package description
-===================
+``IKPdb`` is licensed under a FreeBSD License.
+See :doc:`IKPdb licence<LICENCE>`
 
-This package contains only 1 file ikpdb.py which contains the whole debugger.
+Source code
+------------
 
+Source code is available on github:
 
-
+https://github.com/cmorisse/ikpdb
