@@ -741,7 +741,7 @@ class IKPdb(object):
             # Update local variables (User can use watch expressions for globals)
             locals_vars_list = self.extract_object_properties(frame_browser.f_locals)
 
-            frame_name = "%s(), thread='%s'" % (frame_browser.f_code.co_name, current_tread.name,)
+            frame_name = "%s() [%s]" % (frame_browser.f_code.co_name, current_tread.name,)
             remote_frame = {
                 'id': id(frame_browser),
                 'name': frame_name,
@@ -1274,7 +1274,9 @@ class IKPdb(object):
                 error_messages = []
                 if err:
                     _logger.g_error("setBreakpoint error: %s", err)
-                    error_messages = [err]
+                    msg = "IKPdb error: Failed to set a breakpoint at %s:%s "\
+                          "(%s)." % (file_name, line_number, err,)
+                    error_messages = [msg]
                     result = {}
                     command_exec_status = 'error'
                 else:
@@ -1320,9 +1322,8 @@ class IKPdb(object):
                 bp_number = args.get('breakpoint_number', None)
                 if bp_number is None:
                     result = {}
-                    msg = "clearBreakpointState() error: missing required " \
-                          "breakpointNumber parameter."
-                    _logger.g_error("    "+msg)
+                    msg = "IKPdb error: Failed to delete breakpoint (Missing "\
+                          "required breakpointNumber parameter)."
                     error_messages = [msg]
                     command_exec_status = 'error'
                 else:
@@ -1330,8 +1331,8 @@ class IKPdb(object):
                     result = {}
                     error_messages = []
                     if err:
-                        msg = "clearBreakpoint() error: \"%s\"" % err
-                        _logger.g_error("    "+msg)
+                        msg = "IKPdb error: Failed to delete breakpoint (%s)." % err
+                        _logger.g_error(msg)
                         error_messages = [msg]
                         command_exec_status = 'error'
                     else:
