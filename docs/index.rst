@@ -166,6 +166,12 @@ IKPdb is composed of these projects hosted on github:
 * `IKPdb debugger <https://github.com/cmorisse/ikpdb>`_
 * `IKPdb Cloud9 reference client <https://github.com/cmorisse/c9.ide.run.debug.ikpdb>`_
 
+Developer's Guide
+-----------------
+
+The :doc:`developers_guide` describes how to modify the debugger or the 
+IKPdb's client Cloud9 plugin.
+
 Issues / Suggestions
 --------------------
 
@@ -188,6 +194,7 @@ Other documentation content
    
    cloud9_user_guide
    integration_guide
+   developers_guide
    protocol
    api
    license
