@@ -31,24 +31,7 @@ Choose whatever name you want, but il you plan to share your workspce, you
 should choose an explicit name (eg. ikpdb-dev-1_0_X).
 
 
-Activate the Cloud9 Plugin Manager
-__________________________________
-
-Open the *"Preferences"* panel using the "Cloud9 / Preferences" menu item.
-Open the "EXPERIMENTAL" tab and activate the 3 options in the "SDK" group 
-as shown on next picture:
-
-* Load Custom Plugins
-* Load Plugin From Workspace
-* Plugin Manager
-
-Then reload Cloud9 using the navigator "Refresh Page" command.
-
-.. image:: devguide__activate_plugin_manager.png
-
-When it's done and after you refreshed the page, you must see a "PLUGIN MANAGER"
-tab in the "Preferences" panel.
-
+.. _install-ikpdb-source-code:
 
 Install IKPdb's source code
 ___________________________
@@ -89,6 +72,24 @@ Copy IPdb's python test file "to_debug.py" in your workspace root.
 
 Now, you must have a to_debug.py file at the root of your workspace.
 *to_debug.py* allows to test all debugger's features.
+
+Activate the Cloud9 Plugin Manager
+__________________________________
+
+Open the *"Preferences"* panel using the "Cloud9 / Preferences" menu item.
+Open the "EXPERIMENTAL" tab and activate the 3 options in the "SDK" group 
+as shown on next picture:
+
+* Load Custom Plugins
+* Load Plugin From Workspace
+* Plugin Manager
+
+Then reload Cloud9 using the navigator "Refresh Page" command.
+
+.. image:: devguide__activate_plugin_manager.png
+
+When it's done and after you refreshed the page, you must see a "PLUGIN MANAGER"
+tab in the "Preferences" panel.
 
 Restart Cloud9 in developer mode
 --------------------------------

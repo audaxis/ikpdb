@@ -33,30 +33,6 @@ generation of Javascript editor / IDE (eg. Visual Studio Code, Cloud9, Atom).
 Please note that IKPdb supports only CPython 2.7, CPython 3 support is the next 
 step.
 
-.. _installation:
-
-Installation
-------------
-
-.. code-block:: bash
-
-   $ pip install ikpdb
-
-Installation from sources
-_________________________
-
-Git clone from the official repository then install with one of these:
-
-.. code-block:: bash
-
-   # If you want a specific version
-   $ pip install git+git://github.com/cmorisse/ikpdb.git@1.0.1  # 1.0.1 is a tag
-
-   # If you want latest version from a branch
-   $ pip install git+git://github.com/cmorisse/ikpdb.git@1.0.x  # 1.0.x is the branch name
-
-.. _getting-started:
-
 Getting started
 ---------------
 
@@ -66,7 +42,14 @@ Getting started with Cloud9
 ___________________________
 
 1. Create a Workspace using the Python template
-2. Create a new file with a few statements and save it as "debug_me.py".
+
+2. Install the debugger 
+
+.. code-block:: bash
+
+   $ pip install ikpdb
+
+3. Create a new file with a few statements and save it as "debug_me.py".
 
 You can copy / paste this snippet.
 
@@ -76,14 +59,14 @@ You can copy / paste this snippet.
    print "I want to try Python debugging with IKPdb in Cloud9."
    print "I step over onto this line."
 
-3. Set a breakpoint on the first line by clicking in the left margin until a 
+4. Set a breakpoint on the first line by clicking in the left margin until a 
 red circle appears.
 
 **Ignore the red check button on line 1 ; as it is relevant only for Django development.**
 
 .. image:: index_pic1__py_snippet.png
 
-4. Click on the Run button at the Top menu right-hand side.
+5. Click on the Run button at the Top menu right-hand side.
 
 .. image:: index_pic2__run_button.png
 
@@ -99,19 +82,17 @@ Now you can:
 
 .. _getting-started-without-cloud9:
 
+
 Getting started without Cloud9
 ______________________________
 
-IKPdb is a debug server you launch with:
+IKPdb is a debug server. You need a client to use it.
+You can use Cloud9 client (see above) or develop your own.
 
-.. code-block:: bash
+For that, follow the instructions in :ref:`install-ikpdb-source-code` 
+to install IKPdb from source code.
 
-   $ python -m ikpdb to_debug.py
-   [IKPdb-g] 05:04:40,690467 - INFO - IKPdb 1.0.0-alpha - Inouk Python Debugger for CPython 2.7
-   [IKPdb-g] 05:04:40,690937 - INFO - IKPdb listening on 127.0.0.1:15470
-   
-This command starts debugging of to_debug.py. IKPdb is listening for commands 
-on localhost port 15470 (15470 is default port).
+Now uou can launch IKPdb.
 
 IKPdb has a --help command that shows all available options.
 
@@ -119,14 +100,23 @@ IKPdb has a --help command that shows all available options.
 
    $ python -m ikpdb --help
 
-At that point you need an IKPdp client. For now, the only available client is the `Cloud9 Online IDE <https://c9.io/?redirect=0>`_.
+Start a debugging session with:
 
-But you can start hacking your own client. For that you can use this starting material:
+.. code-block:: bash
 
+   $ python -m ikpdb to_debug.py
+   [IKPdb-g] 05:04:40,690467 - INFO - IKPdb 1.0.0-alpha - Inouk Python Debugger for CPython 2.7
+   [IKPdb-g] 05:04:40,690937 - INFO - IKPdb listening on 127.0.0.1:15470
+   
+This command starts debugging of the *to_debug.py* python file.
+IKPdb is then listening for commands on localhost port 15470 (15470 is default port).
+
+Now you're can start hacking on your own client. For that you can use this starting material:
+
+* :doc:`developers_guide`
 * :doc:`protocol`
 * `IKPdb Cloud9 client source code <https://github.com/cmorisse/c9.ide.run.debug.ikpdb>`_
 * `IKPdb source code <https://github.com/cmorisse/ikpdb>`_
-
 
 .. _source-files-mapping:
 
@@ -148,14 +138,14 @@ To ask IKPdb to display it's working directory add a **--ikpdb-log=G** command
 line parameter in the runner.
 
 User's Guide
-----------
+------------
 
 You'll find more information about IKPdb usage in the 
-:doc:`clou9_user_guide`.
+:doc:`cloud9_user_guide`.
 This guide covers the debugger and the Clou9 client plugin.
 
 Integration's Guide
------------------
+-------------------
 
 You can get a huge productivity boost by integrating IKPdb with your software 
 of the framework you use. Once integrated, the debugger will automaticaly opens
@@ -170,6 +160,13 @@ Developer's Guide
 
 The :doc:`developers_guide` describes how to modify the debugger or the 
 IKPdb's client Cloud9 plugin.
+
+Documentation writer's Guide
+----------------------------
+
+The documentation is written using the Shpinx system.
+
+The :doc:`doc_writers_guide` describes how to enhance / write the documentation.
 
 Source code
 -----------
@@ -205,11 +202,11 @@ Please feel free to file an issue on the project's Github bug tracker if you:
 * have some idea about improvements or optimizations
 * have some needs to build a new debugging client !
 
-Licence
+License
 -------
 
-IKPdb is FreeBSD licenced.
-All detail in the :doc:`licence`
+IKPdb is FreeBSD licensed.
+All detail in the :doc:`license`
 
 
 Indices and tables
