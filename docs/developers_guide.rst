@@ -122,8 +122,8 @@ Cloud9 plugin source code:
 Now, you must have an *inouk.ikpdb* folder at the root of your workspace.
 
 Open the file *'inouk.ikpdb/package.json'* and modify "version" with a unique 
-value. We need this to allow Clou9 to distinguish the embedded IKPdb plugin from
-the one you are developping.
+value. This will help you to check whether Cloud9 is running your version of the
+plugin.
 
 Activate the plugin
 ___________________
@@ -140,7 +140,7 @@ version:
 Now, you must have a *'~/.c9/plugins/inouk.ikpdb'* link to *'~/workspace/inouk.ikpdb'*. 
 
 Refresh your page to reload Cloud9 and use the *PLUGIN MANAGER* to verify that 
-**your** version of the plugin is installed.
+**your** version of the plugin is installed and running.
 
 Test the plugin and the debugger
 --------------------------------

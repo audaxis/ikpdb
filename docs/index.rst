@@ -147,8 +147,15 @@ IKPdb's working directory can be defined:
 To ask IKPdb to display it's working directory add a **--ikpdb-log=G** command 
 line parameter in the runner.
 
-Integration
------------
+User's Guide
+----------
+
+You'll find more information about IKPdb usage in the 
+:doc:`clou9_user_guide`.
+This guide covers the debugger and the Clou9 client plugin.
+
+Integration's Guide
+-----------------
 
 You can get a huge productivity boost by integrating IKPdb with your software 
 of the framework you use. Once integrated, the debugger will automaticaly opens
@@ -158,6 +165,12 @@ an gives you all information required to debug each time an exception occurs.
 
 Read the :doc:`integration_guide` here.
 
+Developer's Guide
+-----------------
+
+The :doc:`developers_guide` describes how to modify the debugger or the 
+IKPdb's client Cloud9 plugin.
+
 Source code
 -----------
 
@@ -166,11 +179,22 @@ IKPdb is composed of these projects hosted on github:
 * `IKPdb debugger <https://github.com/cmorisse/ikpdb>`_
 * `IKPdb Cloud9 reference client <https://github.com/cmorisse/c9.ide.run.debug.ikpdb>`_
 
-Developer's Guide
------------------
+Protocol description
+--------------------
 
-The :doc:`developers_guide` describes how to modify the debugger or the 
-IKPdb's client Cloud9 plugin.
+You'll a find a high level overview of IKPdb's protocol in the 
+:doc:`protocol` 
+
+API
+---
+
+Find the complete documentation of IKPDb's debugger the source code in the
+:doc:`api` document.
+
+Dependencies
+------------
+
+IKPdb has no external dependencies (and we wish this to remain like that).
 
 Issues / Suggestions
 --------------------
@@ -181,23 +205,11 @@ Please feel free to file an issue on the project's Github bug tracker if you:
 * have some idea about improvements or optimizations
 * have some needs to build a new debugging client !
 
-Dependencies
-------------
+Licence
+-------
 
-IKPdb has no external dependencies (and we wish this to remain like that).
-
-Other documentation content
----------------------------
-
-.. toctree::
-   :maxdepth: 2
-   
-   cloud9_user_guide
-   integration_guide
-   developers_guide
-   protocol
-   api
-   license
+IKPdb is FreeBSD licenced.
+All detail in the :doc:`licence`
 
 
 Indices and tables
