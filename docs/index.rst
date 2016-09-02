@@ -161,12 +161,13 @@ Developer's Guide
 The :doc:`developers_guide` describes how to modify the debugger or the 
 IKPdb's client Cloud9 plugin.
 
-Documentation writer's Guide
+Documentation Writer's Guide
 ----------------------------
 
-The documentation is written using the Shpinx system.
+The documentation is written using the `Sphinx Documentation Generator <http://www.sphinx-doc.org/>`_
 
-The :doc:`doc_writers_guide` describes how to enhance / write the documentation.
+The :doc:`doc_writers_guide` describes how to enhance / write the documentation 
+you are reading.
 
 Source code
 -----------

@@ -115,16 +115,14 @@ Cloud9 plugin source code:
 .. code-block:: bash
 
     $ cd ~/workspace
-    $ git clone https://github.com/cmorisse/inouk.ikpdb.git
-    $ cd ikpdb
-    $ git checkout 1.0.x  # Select a branch
-    $ sudo pip install --upgrade -e .
+    $ git clone https://github.com/cmorisse/c9.ide.run.debug.ikpdb.git
 
-Now, you must have an *inouk.ikpdb* folder at the root of your workspace.
+Now, you must have a *c9.ide.run.debug.ikpdb* folder at the root of your 
+workspace.
 
-Open the file *'inouk.ikpdb/package.json'* and modify "version" with a unique 
-value. This will help you to check whether Cloud9 is running your version of the
-plugin.
+Open the *'c9.ide.run.debug.ikpdb/package.json'* file and modify "version" 
+with a unique value. This will help you to check whether Cloud9 is running 
+your version of the plugin.
 
 Activate the plugin
 ___________________
@@ -136,9 +134,10 @@ version:
 
     $ cd ~/workspace
     $ mkdir -p ~/.c9/plugins
-    $ ln -s /home/ubuntu/workspace/inouk.ikpdb  ~/.c9/plugins
+    $ ln -s /home/ubuntu/workspace/c9.ide.run.debug.ikpdb  ~/.c9/plugins
 
-Now, you must have a *'~/.c9/plugins/inouk.ikpdb'* link to *'~/workspace/inouk.ikpdb'*. 
+Now, you must have a *'~/.c9/plugins/c9.ide.run.debug.ikpdb'* link to 
+*'~/workspace/c9.ide.run.debug.ikpdb'*. 
 
 Refresh your page to reload Cloud9 and use the *PLUGIN MANAGER* to verify that 
 **your** version of the plugin is installed and running.
@@ -155,13 +154,6 @@ Your should get something like that:
 
 You can now modify either the debugger or the plugin and see the result.
 
-*Don't forget to reload Cloud9 when you modify the plugin.*
-
-
-
-
-
-
-
-
+*Don't forget to reload Cloud9 (by Refreshing your page) when you modify the 
+plugin.*
 

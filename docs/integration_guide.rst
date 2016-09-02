@@ -13,7 +13,7 @@ includes their own exception manager.
 Example
 -------
 
-The `Odoo software <https://www.odoo.com>`_ integrate it's own exception manager.
+The `Odoo software <https://www.odoo.com>`_ integrates it's own exception manager.
 As shown on the next picture, in case of error, Odoo rolls back the current 
 transaction, opens a window displaying a stacktrace and resume execution 
 when you click the "Ok" button.
