@@ -4,7 +4,8 @@ IKPdb Developer's Guide
 This document describes how to modify the debugger (IKPdb) or the Cloud9 client
 (IKPdb plugin).
 
-IKPdb is developed on Cloud9, so this guide covers the development process on Cloud9.
+IKPdb is developed on Cloud9, so this guide covers the development process on 
+Cloud9.
 You can use a "Free" Cloud9 account to hack on IKPdb.
 
 If you plan to work on IKPdb's Cloud9 client plugin, you should read the 
@@ -23,12 +24,12 @@ dependencies:
     $ sudo apt-get install -y python-dev
 
 
-Create a workspace
-__________________
+Create a Cloud9 Workspace
+_________________________
 
 Create a new Cloud9 Workspace using the Blank (Ubuntu) template. 
-Choose whatever name you want, but il you plan to share your workspce, you 
-should choose an explicit name (eg. ikpdb-dev-1_0_X).
+Choose whatever name you want, but il you plan to share your workspace, you 
+should choose an explicit name (eg. ikpdb_c9plugin-dev-1_0_X).
 
 
 .. _install-ikpdb-source-code:
