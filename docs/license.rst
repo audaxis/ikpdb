@@ -1,12 +1,9 @@
 License
 =======
 
-IKPdb is licensed under a three clause BSD License.  It basically means:
-do whatever you want with it as long as the copyright in IKpdb sticks
-around, the conditions are not modified and the disclaimer is present.
-
-Furthermore you must not use the names of the authors to promote derivatives
-of the software without written consent.
+IKPdb is licensed under the MIT License.  It basically means:
+"do whatever you want as long as you include the original copyright and license 
+notice in any copy of the software/source". 
 
 The full license text can be found below (:ref:`ikpdb-license`).  
 
@@ -32,7 +29,7 @@ documentation.
 
 .. _ikpdb-license:
 
-IKPdb License
--------------
+Full IKPdb's License
+--------------------
 
 .. include:: ../LICENSE

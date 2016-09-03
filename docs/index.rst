@@ -206,14 +206,13 @@ Please feel free to file an issue on the project's Github bug tracker if you:
 License
 -------
 
-IKPdb is FreeBSD licensed.
-All detail in the :doc:`license`
+IKPdb is MIT licensed.
+All detail in the :doc:`license` page.
 
 
 Indices and tables
 ==================
 
 * :ref:`genindex`
-* :ref:`modindex`
 * :ref:`search`
 

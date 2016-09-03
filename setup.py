@@ -1,3 +1,11 @@
+# coding: utf-8
+
+#
+# This file is part of the IKPdb Debugger
+# Copyright 2016, Cyril MORISSE
+# Licence: MIT. See LICENCE at repository root
+#
+
 from setuptools import setup, find_packages, Extension
 
 name = 'ikpdb'

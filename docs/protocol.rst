@@ -3,13 +3,9 @@
 IKPdb Protocol
 ==============
 
-.. module:: ikpdb.IKPdbConnectionHandler
-
-.. currentmodule:: ikpdb.IKPdbConnectionHandler
-
-
 IKPdb communicates with debugging clients by exchanging JSON messages over a 
-TCP socket.
+TCP socket. All exchanges between the debugger and clients are managed by the
+:py:class:`ikpdb.IKPdbConnectionHandler` class.
 
 Protocol overview
 -----------------

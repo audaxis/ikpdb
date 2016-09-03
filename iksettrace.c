@@ -2,6 +2,12 @@
 #include "frameobject.h"
 #include "pystate.h"
 
+/**
+ * This file is part of the IKPdb Debugger
+ * Copyright 2016, Cyril MORISSE
+ * Licence: MIT. See LICENCE at repository root
+ */
+
 static long debuggerThreadIdent = 0;  // Track debugger thread ident
 
 /*

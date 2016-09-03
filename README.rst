@@ -25,18 +25,16 @@ Git clone from the official repository then install with one of these:
 
 .. code-block:: bash
 
-   # If you want a specific version
-   $ pip install git+git://github.com/cmorisse/ikpdb.git@1.0.1  # 1.0.1 is a tag
-
-   # If you want latest version from a branch
    $ pip install git+git://github.com/cmorisse/ikpdb.git@1.0.x  # 1.0.x is the branch name
+
 
 .. _getting-started:
 
 Getting started
 ---------------
 
-Cloud9 is our debugger reference implementation so head to `Cloud9 <https://c9.io/>`_, create an account there then:
+Cloud9 is our debugger client reference implementation so head 
+to `Cloud9 <https://c9.io/>`_, create an account there then:
 
 1. Create a Workspace using the Python template
 2. Create a new file with a few statements and save it as "debug_me.py".
@@ -85,8 +83,8 @@ CPython 2.7
 License
 -------
 
-``IKPdb`` is licensed under a FreeBSD License.
-See the Licence paragraph in the documentation or the LICENSE file in this repository.
+``IKPdb`` is licensed under the MIT License.
+See the License paragraph in the documentation.
 
 Source code
 ------------
@@ -94,3 +92,10 @@ Source code
 Source code is available on github:
 
 https://github.com/cmorisse/ikpdb
+
+
+Issues
+------
+
+Issues are managed using Github's Issues Tracker.
+

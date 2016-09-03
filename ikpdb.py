@@ -1,5 +1,12 @@
 #! /usr/bin/env python
 # coding: utf8
+
+#
+# This file is part of the IKPdb Debugger
+# Copyright 2016, Cyril MORISSE
+# Licence: MIT. See LICENCE at repository root
+#
+
 import socket
 import sys
 import os
