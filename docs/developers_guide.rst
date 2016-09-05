@@ -12,24 +12,24 @@ If you plan to work on IKPdb's Cloud9 client plugin, you should read the
 `Cloud9 SDK Documentation <https://cloud9-sdk.readme.io/docs>`_.
 
 
-Development environment Setup
------------------------------
-
-Use these commands in the terminal of your workspace to install required 
-dependencies:
-
-.. code-block:: bash
-
-    $ sudo apt-get update
-    $ sudo apt-get install -y python-dev
-
-
 Create a Cloud9 Workspace
 _________________________
 
 Create a new Cloud9 Workspace using the Blank (Ubuntu) template. 
 Choose whatever name you want, but il you plan to share your workspace, you 
 should choose an explicit name (eg. ikpdb_c9plugin-dev-1_0_X).
+
+
+Development environment Setup
+-----------------------------
+
+Use these commands in the terminal of your Cloud9 workspace to install required 
+dependencies:
+
+.. code-block:: bash
+
+    $ sudo apt-get update
+    $ sudo apt-get install -y python-dev
 
 
 .. _install-ikpdb-source-code:
