@@ -23,7 +23,7 @@ IKPdb supports:
 * Variables hot modifications
 * :ref:`turbo-mode`
 
-IKPdb has no integrated GUI ; it's only interface is a TCP protocol.
+IKPdb has no integrated GUI ; its only interface is a TCP protocol.
 
 **IKPdb client GUI reference implementation is** `Cloud9 Online IDE <https://c9.io/?redirect=0>`_
 
@@ -92,7 +92,7 @@ You can use Cloud9 client (see above) or develop your own.
 For that, follow the instructions in :ref:`install-ikpdb-source-code` 
 to install IKPdb from source code.
 
-Now uou can launch IKPdb.
+Now you can launch IKPdb.
 
 IKPdb has a --help command that shows all available options.
 
@@ -111,7 +111,7 @@ Start a debugging session with:
 This command starts debugging of the *to_debug.py* python file.
 IKPdb is then listening for commands on localhost port 15470 (15470 is default port).
 
-Now you're can start hacking on your own client. For that you can use this starting material:
+Now you can start hacking on your own client. For that you can use this starting material:
 
 * :doc:`developers_guide`
 * :doc:`protocol`
@@ -126,7 +126,7 @@ Source files mapping
 IKPdb exchanges file names with his debugger clients. When it sends a file name, IKPdb 
 always uses full path. But some debuggers client sends relative paths 
 (when setting breakpoints for example). In that case, IKPdb tries to resolve the
-file's full path using it's *"working directory"* as a base folder. If it fails, 
+file's full path using its *"working directory"* as a base folder. If it fails, 
 IKPdb sends a "FileMappingError:".
 
 IKPdb's working directory can be defined:
@@ -134,7 +134,7 @@ IKPdb's working directory can be defined:
 * Implicitly ; working directory is set to the debugged program's current directory.
 * Explictly ; using the **--ikpdb-working-directory** command line parameter
 
-To ask IKPdb to display it's working directory add a **--ikpdb-log=G** command 
+To ask IKPdb to display its working directory add a **--ikpdb-log=G** command 
 line parameter in the runner.
 
 User's Guide
@@ -142,12 +142,12 @@ User's Guide
 
 You'll find more information about IKPdb usage in the 
 :doc:`cloud9_user_guide`.
-This guide covers the debugger and the Clou9 client plugin.
+This guide covers the debugger and the Cloud9 client plugin.
 
 Integration's Guide
 -------------------
 
-You can get a huge productivity boost by integrating IKPdb with your software 
+You can get a huge productivity boost by integrating IKPdb with the software 
 of the framework you use. Once integrated, the debugger will automaticaly opens
 an gives you all information required to debug each time an exception occurs.
 
@@ -166,7 +166,7 @@ Documentation Writer's Guide
 
 The documentation is written using the `Sphinx Documentation Generator <http://www.sphinx-doc.org/>`_
 
-The :doc:`doc_writers_guide` describes how to enhance / write the documentation 
+The :doc:`doc_writers_guide` describes how to enhance the documentation 
 you are reading.
 
 Source code
@@ -180,13 +180,13 @@ IKPdb is composed of these projects hosted on github:
 Protocol description
 --------------------
 
-You'll a find a high level overview of IKPdb's protocol in the 
+You'll find a high level overview of IKPdb's protocol in the 
 :doc:`protocol` 
 
 API
 ---
 
-Find the complete documentation of IKPDb's debugger the source code in the
+Find the complete documentation of IKPDb's debugger source code in the
 :doc:`api` document.
 
 Dependencies
