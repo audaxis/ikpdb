@@ -21,7 +21,7 @@ long_description = (
     'Contributors\n'
     '############\n'
     + '\n' +
-    open('AUTHORS').read()
+    open('CONTRIBUTORS.rst').read()
     + '\n' +
     'Change history\n'
     '##############\n'
