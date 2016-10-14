@@ -25,7 +25,7 @@ Git clone from the official repository then install with one of these:
 
 .. code-block:: bash
 
-   $ pip install git+git://github.com/cmorisse/ikpdb.git@1.0.x  # 1.0.x is the branch name
+   $ pip install git+git://github.com/audaxis/ikpdb.git@1.0.x  # 1.0.x is the branch name
 
 
 .. _getting-started:
@@ -91,7 +91,7 @@ Source code
 
 Source code is available on github:
 
-https://github.com/cmorisse/ikpdb
+https://github.com/audaxis/ikpdb
 
 
 Issues

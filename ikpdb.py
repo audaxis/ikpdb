@@ -3,7 +3,7 @@
 
 #
 # This file is part of the IKPdb Debugger
-# Copyright 2016, Cyril MORISSE
+# Copyright (c) 2016 by Cyril MORISSE, Audaxis
 # Licence: MIT. See LICENCE at repository root
 #
 
@@ -28,7 +28,7 @@ import iksettrace
 
 # For now ikpdb is a singleton
 ikpdb = None 
-__version__ = "1.0.0"
+__version__ = "1.0.0-beta"
 
 ##
 # Logging System
@@ -1568,7 +1568,7 @@ def signal_handler(signal, frame):
 def main():
 
     parser = argparse.ArgumentParser(description="IKPdb %s - Inouk Python Debugger for CPython 2.7" % __version__,
-                                     epilog="(c) 2016 Cyril MORISSE - @cmorisse")
+                                     epilog="Copyright (c) 2016 by Cyril MORISSE, Audaxis")
     parser.add_argument("-ik_a","--ikpdb-address", 
                         default='127.0.0.1',
                         dest="IKPDB_ADDRESS",

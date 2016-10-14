@@ -45,7 +45,7 @@ Don't forget to replace *1.0.x* below by the branch you want to work on.
 
 .. code-block:: bash
 
-    $ git clone https://github.com/cmorisse/ikpdb.git
+    $ git clone https://github.com/audaxis/ikpdb.git
     $ cd ikpdb
     $ git checkout 1.0.x  # Select a branch
     $ sudo pip install --upgrade -e .
@@ -116,7 +116,7 @@ Cloud9 plugin source code:
 .. code-block:: bash
 
     $ cd ~/workspace
-    $ git clone https://github.com/cmorisse/c9.ide.run.debug.ikpdb.git
+    $ git clone https://github.com/audaxis/c9.ide.run.debug.ikpdb.git
 
 Now, you must have a *c9.ide.run.debug.ikpdb* folder at the root of your 
 workspace.

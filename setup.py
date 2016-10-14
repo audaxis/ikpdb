@@ -2,14 +2,14 @@
 
 #
 # This file is part of the IKPdb Debugger
-# Copyright 2016, Cyril MORISSE
+# Copyright (c) 2016 by Cyril MORISSE, Audaxis
 # Licence: MIT. See LICENCE at repository root
 #
 
 from setuptools import setup, find_packages, Extension
 
 name = 'ikpdb'
-version = '1.0.0'
+version = '1.0.0-beta'
 
 
 long_description = (
@@ -38,9 +38,9 @@ setup(
     #packages = find_packages('src'),
     py_modules = ['ikpdb'],
     #package_dir={'': 'src'},
-    url='https://github.com/cmorisse/ikpdb',
-    license='BSD',
-    author='Cyril MORISSE',
+    url='https://github.com/audaxis/ikpdb',
+    license='MIT',
+    author='Cyril MORISSE, Audaxis',
     author_email='cmorisse@boxes3.net',
     description="A hackable CPython remote debugger designed for the Web and online IDE integration.",
     long_description = long_description,
@@ -49,7 +49,7 @@ setup(
     #install_requires=['setuptools',],
     classifiers=[
         #'Framework :: Buildout',
-        'Development Status :: 4 - Alpha',
+        'Development Status :: 4 - Beta',
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
         'Topic :: Software Development :: Debuggers',

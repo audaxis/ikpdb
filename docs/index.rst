@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-.. _IKPdbGitHub: https://github.com/cmorisse/ikpdb
-.. _IKPdbCloud9PluginGitHub: https://github.com/cmorisse/c9.ide.run.debug.ikpdb
+.. _IKPdbGitHub: https://github.com/audaxis/ikpdb
+.. _IKPdbCloud9PluginGitHub: https://github.com/audaxis/c9.ide.run.debug.ikpdb
 .. _Cloud9GitHub: https://github.com/c9/core
 
 
@@ -105,7 +105,7 @@ Start a debugging session with:
 .. code-block:: bash
 
    $ python -m ikpdb to_debug.py
-   [IKPdb-g] 05:04:40,690467 - INFO - IKPdb 1.0.0-alpha - Inouk Python Debugger for CPython 2.7
+   [IKPdb-g] 05:04:40,690467 - INFO - IKPdb 1.0.0-beta - Inouk Python Debugger for CPython 2.7
    [IKPdb-g] 05:04:40,690937 - INFO - IKPdb listening on 127.0.0.1:15470
    
 This command starts debugging of the *to_debug.py* python file.
@@ -115,8 +115,8 @@ Now you can start hacking on your own client. For that you can use this starting
 
 * :doc:`developers_guide`
 * :doc:`protocol`
-* `IKPdb Cloud9 client source code <https://github.com/cmorisse/c9.ide.run.debug.ikpdb>`_
-* `IKPdb source code <https://github.com/cmorisse/ikpdb>`_
+* `IKPdb Cloud9 client source code <https://github.com/audaxis/c9.ide.run.debug.ikpdb>`_
+* `IKPdb source code <https://github.com/audaxis/ikpdb>`_
 
 .. _source-files-mapping:
 
@@ -174,8 +174,8 @@ Source code
 
 IKPdb is composed of these projects hosted on github:
 
-* `IKPdb debugger <https://github.com/cmorisse/ikpdb>`_
-* `IKPdb Cloud9 reference client <https://github.com/cmorisse/c9.ide.run.debug.ikpdb>`_
+* `IKPdb debugger <https://github.com/audaxis/ikpdb>`_
+* `IKPdb Cloud9 reference client <https://github.com/audaxis/c9.ide.run.debug.ikpdb>`_
 
 Protocol description
 --------------------

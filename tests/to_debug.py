@@ -1,3 +1,10 @@
+# coding: utf-8
+
+#
+# This file is part of the IKPdb Debugger
+# Copyright (c) 2016 by Cyril MORISSE, Audaxis
+# Licence: MIT. See LICENCE at repository root
+#
 import sys
 import os
 import time
