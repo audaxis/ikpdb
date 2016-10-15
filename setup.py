@@ -9,20 +9,11 @@
 from setuptools import setup, find_packages, Extension
 
 name = 'ikpdb'
-version = '1.0.0b4'
+version = '1.0.0b5'
 
 
 long_description = (
-    '\nDescription\n'
-      '###########\n'
-    + '\n' +
     open('README.rst').read()
-    + '\n' +
-    'Change history\n'
-    '##############\n'
-    + '\n' +
-    open('CHANGES.txt').read()
-    + '\n'
 )
 
 iksettrace_module = Extension('iksettrace', sources=['iksettrace.c'])
