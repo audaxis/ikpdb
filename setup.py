@@ -9,19 +9,14 @@
 from setuptools import setup, find_packages, Extension
 
 name = 'ikpdb'
-version = '1.0.0-beta'
+version = '1.0.0b4'
 
 
 long_description = (
-    '\nDetailed Documentation\n'
-      '######################\n'
+    '\nDescription\n'
+      '###########\n'
     + '\n' +
     open('README.rst').read()
-    + '\n' +
-    'Contributors\n'
-    '############\n'
-    + '\n' +
-    open('CONTRIBUTORS.rst').read()
     + '\n' +
     'Change history\n'
     '##############\n'
@@ -38,7 +33,6 @@ setup(
     #packages = find_packages('src'),
     py_modules = ['ikpdb'],
     #package_dir={'': 'src'},
-    url='https://github.com/audaxis/ikpdb',
     license='MIT',
     author='Cyril MORISSE, Audaxis',
     author_email='cmorisse@boxes3.net',
@@ -46,6 +40,11 @@ setup(
     long_description = long_description,
     keywords = "debugger debug remote tcp",
     include_package_data=True,
+    url = 'https://github.com/audaxis/ikpdb',
+    
+    # files will be hosted on index
+    #download_url = 'https://github.com/cmorisse/ikpdb/archive/1.0.x.zip', 
+    
     #install_requires=['setuptools',],
     classifiers=[
         #'Framework :: Buildout',

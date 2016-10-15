@@ -1,6 +1,5 @@
-===========
 1.0.0-beta
-===========
+==========
 
 - First version with command loop in a thread.
 
