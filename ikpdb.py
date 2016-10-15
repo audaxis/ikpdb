@@ -28,7 +28,7 @@ import iksettrace
 
 # For now ikpdb is a singleton
 ikpdb = None 
-__version__ = "1.0.0-beta"
+__version__ = "1.0.0"
 
 ##
 # Logging System

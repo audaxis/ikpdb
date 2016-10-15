@@ -105,7 +105,7 @@ Start a debugging session with:
 .. code-block:: bash
 
    $ python -m ikpdb to_debug.py
-   [IKPdb-g] 05:04:40,690467 - INFO - IKPdb 1.0.0-beta - Inouk Python Debugger for CPython 2.7
+   [IKPdb-g] 05:04:40,690467 - INFO - IKPdb 1.0.0 - Inouk Python Debugger for CPython 2.7
    [IKPdb-g] 05:04:40,690937 - INFO - IKPdb listening on 127.0.0.1:15470
    
 This command starts debugging of the *to_debug.py* python file.

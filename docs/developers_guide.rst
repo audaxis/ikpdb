@@ -60,7 +60,7 @@ version:
     [GCC 4.8.2] on linux2
     Type "help", "copyright", "credits" or "license" for more information.
     >>> import ikpdb ; ikpdb.__version__
-    '1.0.0-alpha'
+    '1.0.0'
     >>>exit()
     $
 

@@ -46,8 +46,9 @@ https://ikpdb.readthedocs.io/
 Requirements
 ------------
 
-CPython 2.7
+CPython 2.7.
 
+A C compiler (eg. python-dev Debian package, xcode tools on macOS).
 
 License
 -------
