@@ -3,7 +3,7 @@ IKPdb is written and maintained by Cyril MORISSE and various contributors:
 Development Lead
 ________________
 
-- `Cyril MORISSE <https://twitter.com/cmorisse>`_
+- Cyril MORISSE <cmorisse@boxes3.net>
 
 
 Patches, Suggestions and Reviews
