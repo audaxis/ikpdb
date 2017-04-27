@@ -25,10 +25,11 @@ import datetime
 import cStringIO
 import ctypes
 import iksettrace
+import cgi
 
 # For now ikpdb is a singleton
 ikpdb = None 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 ##
 # Logging System
@@ -198,7 +199,7 @@ class IKPdbConnectionHandler(object):
     This class contains methods to receive, send and reply to such messages.
     """
     MAGIC_CODE = "LLADpcdtbdpac"
-    MESSAGE_TEMPLATE = "length=%s"+MAGIC_CODE+"%s"
+    MESSAGE_TEMPLATE = "length=%%s%s%%s" % MAGIC_CODE
     
     SOCKET_BUFFER_SIZE = 4096  # Maximum size of a packet received from client
     MSG_WAITALL = 0x100  # From Linux sys/socket.h
@@ -364,13 +365,15 @@ class IKPdbQuit(Exception):
 
 def IKPdbRepr(t):
     """ A function that returns a type representation suitable for debugger GUI.
-    
     :param t: anyThing
+    :return: a string representation of t's type
+    Note: Type representation str format is not finalized...
     """
-    if hasattr(t, '__class__'):
-        return t.__class__.__name__
-    t_type = type(t)
-    return str(t_type).split(' ')[1][1:-2]
+    #if hasattr(t, '__class__'):
+    #    return t.__class__.__name__
+    #t_type = type(t)
+    #return str(t_type).split(' ')[1][1:-2]
+    return str(type(t))
 
 class IKBreakpoint(object):
     """ IKBreakpoint implements and manages IKPdb Breakpoints. 
@@ -551,10 +554,9 @@ class IKPdb(object):
     Take note that, right now, IKPdb is used as singleton.
     """
     
-    def __init__(self, skip=None, stop_at_first_statement=False,
-                 working_directory=None):
-        self.skip = set(skip) if skip else None
+    def __init__(self, skip=None, stop_at_first_statement=False, working_directory=None):
         # TODO: manage skip
+        self.skip = set(skip) if skip else None
         
         self.debugger_thread_ident = None
         self.file_name_cache = {}        
@@ -582,6 +584,9 @@ class IKPdb(object):
         # If True, debugger breaks on first line to allow user to setup 
         # some breakpoints.
         self.stop_at_first_statement = True if stop_at_first_statement else False
+        
+        # Some parameters that may need to become cli options
+        self.CGI_ESCAPE_EVALUATE_OUTPUT = True
 
 
     def canonic(self, file_name):
@@ -636,12 +641,12 @@ class IKPdb(object):
     def object_properties_count(self, o):
         """ returns the number of user browsable properties of an object. """
         o_type = type(o)
-        if type(o) in (types.DictType, types.ListType, types.TupleType,):
+        if isinstance(o, (types.DictType, types.ListType, types.TupleType, set,)):
             return len(o)
-        elif type(o) in (types.NoneType, types.BooleanType, types.FloatType, 
-                         types.UnicodeType, types.FloatType, types.IntType, 
-                         types.StringType, types.LongType, types.ModuleType, 
-                         types.MethodType, types.FunctionType,):
+        elif isinstance(o, (types.NoneType, types.BooleanType, types.FloatType, 
+                            types.UnicodeType, types.FloatType, types.IntType, 
+                            types.StringType, types.LongType, types.ModuleType, 
+                            types.MethodType, types.FunctionType,)):
             return 0
         else:
             # Following lines are used to debug variables members browsing
@@ -673,39 +678,59 @@ class IKPdb(object):
                 count = 0
             return count
 
-    def extract_object_properties(self, o):
-        """ extracts all properties from an object (eg. f_locals, f_globals, 
-        user dict, instance ...) and returns them as an array of variables
+    def extract_object_properties(self, o, limit_size=False):
+        """Extracts all properties from an object (eg. f_locals, f_globals, 
+        user dict, instance ...) and returns them as an array of variables.
         """
-        _logger.e_debug("extract_object_properties(%s)", o)
+        _logger.e_debug("extract_object_properties(%s)", repr(o)[:512])
         var_list = []
-        if type(o) == types.DictType:
+        if isinstance(o, types.DictType):
             a_var_name = None
             a_var_value = None
             for a_var_name in o:
                 a_var_value = o[a_var_name]
+                children_count = self.object_properties_count(a_var_value)
+                v_name, v_value, v_type = self.extract_name_value_type(a_var_name, 
+                                                                       a_var_value, 
+                                                                       limit_size=limit_size)
                 a_var_info = {
                     'id': id(a_var_value),
-                    'name': a_var_name,
-                    'type': IKPdbRepr(a_var_value),
-                    'value': repr(a_var_value),
-                    'children_count': self.object_properties_count(a_var_value)
+                    'name': v_name,
+                    'type': "%s%s" % (v_type, " [%s]" % children_count if children_count else '',),
+                    'value': v_value,
+                    'children_count': children_count,
                 }
                 var_list.append(a_var_info)
                 
-        elif type(o) in (types.ListType, types.TupleType,):
+        elif type(o) in (types.ListType, types.TupleType, set,):
+            MAX_CHILDREN_TO_RETURN = 256
+            MAX_CHILDREN_MESSAGE = "Truncated by ikpdb (don't hot change me !)."
             a_var_name = None
             a_var_value = None
-            for a_var_name, a_var_value in enumerate(o):
+            do_truncate = len(o) > MAX_CHILDREN_TO_RETURN
+            for idx, a_var_value in enumerate(o):
+                children_count = self.object_properties_count(a_var_value)
+                v_name, v_value, v_type = self.extract_name_value_type(idx, 
+                                                                       a_var_value, 
+                                                                       limit_size=limit_size)
                 var_list.append({
                     'id': id(a_var_value),
-                    'name': a_var_name,
-                    'type': IKPdbRepr(a_var_value),
-                    'value': repr(a_var_value),
-                    'children_count': self.object_properties_count(a_var_value)
+                    'name': v_name,
+                    'type': "%s%s" % (v_type, " [%s]" % children_count if children_count else '',),
+                    'value': v_value,
+                    'children_count': children_count,
                 })
-
+                if do_truncate and idx==MAX_CHILDREN_TO_RETURN-1:
+                    var_list.append({
+                        'id': None,
+                        'name': str(MAX_CHILDREN_TO_RETURN),
+                        'type': '',
+                        'value': MAX_CHILDREN_MESSAGE,
+                        'children_count': 0,
+                    })
+                    break
         else:
+
             a_var_name = None
             a_var_value = None
             if hasattr(o, '__dict__'):
@@ -714,15 +739,32 @@ class IKPdb(object):
                         and not type(a_var_value) in (types.ModuleType, 
                                                       types.MethodType, 
                                                       types.FunctionType,)):
+                        children_count = self.object_properties_count(a_var_value)
+                        v_name, v_value, v_type = self.extract_name_value_type(a_var_name,
+                                                                               a_var_value, 
+                                                                               limit_size=limit_size)
                         var_list.append({
                             'id': id(a_var_value),
-                            'name': a_var_name,
-                            'type': IKPdbRepr(a_var_value),
-                            'value': repr(a_var_value),
-                            'children_count': self.object_properties_count(a_var_value)
+                            'name': v_name,
+                            'type': "%s%s" % (v_type, " [%s]" % children_count if children_count else '',),
+                            'value': v_value,
+                            'children_count': children_count,
                         })
         return var_list    
-            
+    
+    def extract_name_value_type(self, name, value, limit_size=False):
+        """Extracts value of any object, eventually reduces it's size and
+        returns name, truncated value and type (for str with size appended)
+        """
+        MAX_STRING_LEN_TO_RETURN = 487
+        t_value = repr(value)
+        r_value = "%s ... (truncated by ikpdb)" % (t_value[:MAX_STRING_LEN_TO_RETURN],) if len(t_value) > MAX_STRING_LEN_TO_RETURN else t_value
+        r_name = repr(name)
+        if isinstance(value, types.StringType):
+            r_type = "%s [%s]" % (IKPdbRepr(value), len(value),)
+        else:
+            r_type = IKPdbRepr(value)
+        return r_name, r_value, r_type
 
     def dump_frames(self, frame):
         """ dumps frames chain in a representation suitable for serialization 
@@ -746,7 +788,8 @@ class IKPdb(object):
                             hex(id(self.frame_beginning)))
                                 
             # Update local variables (User can use watch expressions for globals)
-            locals_vars_list = self.extract_object_properties(frame_browser.f_locals)
+            locals_vars_list = self.extract_object_properties(frame_browser.f_locals,
+                                                              limit_size=True)
 
             frame_name = "%s() [%s]" % (frame_browser.f_code.co_name, current_tread.name,)
             remote_frame = {
@@ -761,12 +804,13 @@ class IKPdb(object):
             frame_browser = frame_browser.f_back
         return frames        
 
-
     def evaluate(self, frame_id, expression, global_context=False, disable_break=False):
-        """ evaluate 'expression' in the context of the frame identified by
+        """Evaluates 'expression' in the context of the frame identified by
         'frame_id' or globally.
         Breakpoints are disabled depending on 'disable_break' value.
-        Returnsprint a tuple of value and type both as str.
+        Returns a tuple of value and type both as str.
+        Note that - depending on the CGI_ESCAPE_EVALUATE_OUTPUT attribute - value is 
+        escaped.
         """
         if disable_break:
             breakpoints_backup = IKBreakpoint.backup_breakpoints_state()
@@ -792,7 +836,7 @@ class IKPdb(object):
                 sys.stdout = eval_stdout
                 exec(expression, global_vars, local_vars)
                 sys.stdout = sys_stdout
-                result_value = "<plaintext>%s" % eval_stdout.getvalue()
+                result_value = eval_stdout.getvalue()
                 result_type = "str"
                 result = result_value
             except Exception as e:
@@ -813,10 +857,13 @@ class IKPdb(object):
         if disable_break:
             IKBreakpoint.restore_breakpoints_state(breakpoints_backup)
 
-        _logger.e_debug("evaluate(%s) => value = %s:%s | %s", expression, 
-                                                              result_value, 
-                                                              result_type, 
-                                                              result)
+        _logger.e_debug("evaluate(%s) => result_value=%s, result_type=%s, result=%s", 
+                        expression, 
+                        result_value, 
+                        result_type, 
+                        result)
+        if self.CGI_ESCAPE_EVALUATE_OUTPUT:
+            result_value = cgi.escape(result_value) 
         return result_value, result_type
 
     def let_variable(self, frame_id, var_name, expression_value):
@@ -979,7 +1026,7 @@ class IKPdb(object):
         if exc_info:
             exception = {
                 'type': IKPdbRepr(exc_info[1]),
-                'info': exc_info[1].message
+                'info': str(exc_info[1].message)
             }
 
         if self.stop_at_first_statement:
@@ -1215,8 +1262,7 @@ class IKPdb(object):
         __main__.__dict__.clear()
         __main__.__dict__.update({"__name__"    : "__main__",
                                   "__file__"    : filename,
-                                  "__builtins__": __builtins__,
-                                 })
+                                  "__builtins__": __builtins__,})
 
         self.mainpyfile = self.canonic(filename)
         statement = 'execfile(%r)\n' % filename
