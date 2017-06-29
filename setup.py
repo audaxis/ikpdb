@@ -2,14 +2,14 @@
 
 #
 # This file is part of the IKPdb Debugger
-# Copyright (c) 2016 by Cyril MORISSE, Audaxis
+# Copyright (c) 2016, 2017 by Cyril MORISSE, Audaxis
 # Licence: MIT. See LICENCE at repository root
 #
 
 from setuptools import setup, find_packages, Extension
 
 name = 'ikpdb'
-version = '1.0.1'
+version = '1.1'
 
 
 long_description = (
