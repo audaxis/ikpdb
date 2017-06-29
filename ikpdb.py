@@ -29,7 +29,7 @@ import cgi
 
 # For now ikpdb is a singleton
 ikpdb = None 
-__version__ = "1.0.1"
+__version__ = "1.0.2_cmo_path_mapping"
 
 ##
 # Logging System
@@ -79,9 +79,7 @@ class MetaIKPdbLogger(type):
 
 class IKPdbLogger(object):
     """ IKPdb implements it's own logging system to:
-
-    - avoid problem while debugging programs that reconfigure logging system 
-      wide.
+    - avoid problem while debugging programs that reconfigure logging system wide.
     - allow IKPdb debugging...
     """
     __metaclass__ = MetaIKPdbLogger
@@ -158,7 +156,6 @@ class IKPdbLogger(object):
             - `_logger` is a reference to the IKPdbLogger class
             - `x` is the `Execution` domain
             - `debug` is the logging level
-        
         """
         if not ikpdb_log_arg:
             return
@@ -260,8 +257,6 @@ class IKPdbConnectionHandler(object):
         :param exception: If debugger encounter an exception, this dict contains
                           2 keys: `type` and `info` (the later is the message).
         :type exception: dict
-
-        
         """
         with self._connection_lock:
             msg = self.encode({
@@ -554,7 +549,8 @@ class IKPdb(object):
     Take note that, right now, IKPdb is used as singleton.
     """
     
-    def __init__(self, skip=None, stop_at_first_statement=False, working_directory=None):
+    def __init__(self, skip=None, stop_at_first_statement=False, working_directory=None, 
+                 client_working_directory=None):
         # TODO: manage skip
         self.skip = set(skip) if skip else None
         
@@ -562,6 +558,8 @@ class IKPdb(object):
         self.file_name_cache = {}        
         
         self._CWD = working_directory or os.getcwd()
+        self._CLIENT_CWD = client_working_directory or ''
+        
         self.mainpyfile = ''
         self._active_breakpoint_lock = threading.Lock()
         self._active_thread_lock = threading.Lock()
@@ -603,40 +601,67 @@ class IKPdb(object):
             self.file_name_cache[file_name] = c_file_name
         return c_file_name
 
-    def lookup_module(self, file_name):
-        """ translate a (possibly incomplete) file or module name into an 
-        absolute file name.
+    def normalize_path_in(self, client_file_name):
+        """Translate a (possibly incomplete) file or module name received from debugging client
+        into an absolute file name.
         """
-        _logger.p_debug("lookup_module(%s) with os.getcwd()=>%s", file_name, os.getcwd())
+        _logger.p_debug("normalize_path_in(%s) with os.getcwd()=>%s", client_file_name, os.getcwd())
+        
+        # remove client CWD from file_path
+        if client_file_name.startswith(self._CLIENT_CWD):
+            file_name = client_file_name[len(self._CLIENT_CWD):]
+        else:
+            file_name = client_file_name
         
         if os.path.isabs(file_name) and os.path.exists(file_name):
+            _logger.p_debug("  => found absolute path: '%s'", file_name)
             return file_name
-            
-        # Can we find file relatively to launch script
-        f = os.path.join(sys.path[0], file_name)  
-        if os.path.exists(f) and self.canonic(f) == self.mainpyfile:
-            return f
             
         # Can we find the file relatively to launch CWD (useful with buildout)
         f = os.path.join(self._CWD, file_name)  
         if  os.path.exists(f):
+            _logger.p_debug("  => found path relative to self._CWD: '%s'", f)
             return f
 
+        # Can we find file relatively to launch script
+        f = os.path.join(sys.path[0], file_name)  
+        if os.path.exists(f) and self.canonic(f) == self.mainpyfile:
+            _logger.p_debug("  => found path relative to launch script: '%s'", f)
+            return f
+            
         # Try as an absolute path after adding .py extension 
         root, ext = os.path.splitext(file_name)
         if ext == '':
-            file_name = file_name + '.py'
-        if os.path.isabs(file_name):
-            return file_name
+            f = file_name + '.py'
+        if os.path.isabs(f):
+            _logger.p_debug("  => found absolute path after adding .py extension: '%s'", f)
+            return f
         
         # Can we find the file in system path
         for dir_name in sys.path:
             while os.path.islink(dir_name):
                 dir_name = os.readlink(dir_name)
-            full_name = os.path.join(dir_name, file_name)
-            if os.path.exists(full_name):
-                return full_name
+            f = os.path.join(dir_name, file_name)
+            if os.path.exists(f):
+                _logger.p_debug("  => found path in sys.path: '%s'", f)
+                return f
         return None
+
+    def normalize_path_out(self, path):
+        """Normalizes path sent to client
+        :param path: path to normalize
+        :return: normalized path
+        """
+        if path.startswith(self._CWD):
+            normalized_path = path[len(self._CWD):]
+        else:
+            normalized_path = path
+        # For remote debugging preprend client CWD
+        if self._CLIENT_CWD:
+            normalized_path = os.path.join(self._CLIENT_CWD, normalized_path)
+        _logger.p_debug("normalize_path_out('%s') => %s", path, normalized_path)
+        return normalized_path
+
 
     def object_properties_count(self, o):
         """ returns the number of user browsable properties of an object. """
@@ -730,7 +755,6 @@ class IKPdb(object):
                     })
                     break
         else:
-
             a_var_name = None
             a_var_value = None
             if hasattr(o, '__dict__'):
@@ -759,7 +783,10 @@ class IKPdb(object):
         MAX_STRING_LEN_TO_RETURN = 487
         t_value = repr(value)
         r_value = "%s ... (truncated by ikpdb)" % (t_value[:MAX_STRING_LEN_TO_RETURN],) if len(t_value) > MAX_STRING_LEN_TO_RETURN else t_value
-        r_name = repr(name)
+        if isinstance(name, types.StringType):
+            r_name = name
+        else:
+            r_name = repr(name)
         if isinstance(value, types.StringType):
             r_type = "%s [%s]" % (IKPdbRepr(value), len(value),)
         else:
@@ -790,13 +817,15 @@ class IKPdb(object):
             # Update local variables (User can use watch expressions for globals)
             locals_vars_list = self.extract_object_properties(frame_browser.f_locals,
                                                               limit_size=True)
+            # normalize path sent to debugging client
+            file_path = self.normalize_path_out(frame_browser.f_code.co_filename)
 
             frame_name = "%s() [%s]" % (frame_browser.f_code.co_name, current_tread.name,)
             remote_frame = {
                 'id': id(frame_browser),
                 'name': frame_name,
                 'line_number': frame_browser.f_lineno,  # Warning 1 based
-                'file_path': frame_browser.f_code.co_filename, 
+                'file_path': file_path,
                 'thread': id(current_tread),
                 'f_locals': locals_vars_list
             }
@@ -1335,22 +1364,32 @@ class IKPdb(object):
                                 condition,
                                 enabled,
                                 os.getcwd())
-                c_file_name = self.lookup_module(file_name)
-                err, bp_number = self.set_breakpoint(c_file_name, 
-                                                     line_number, 
-                                                     condition=condition,
-                                                     enabled=enabled)
+                
                 error_messages = []
-                if err:
+                result = {}
+
+                c_file_name = self.normalize_path_in(file_name)
+                if not c_file_name:
+                    err = "Failed to find file '%s'" % file_name
                     _logger.g_error("setBreakpoint error: %s", err)
                     msg = "IKPdb error: Failed to set a breakpoint at %s:%s "\
-                          "(%s)." % (file_name, line_number, err,)
+                          "(%s)." % (file_name, line_number, err)
                     error_messages = [msg]
-                    result = {}
                     command_exec_status = 'error'
-                else:
-                    result = {'breakpoint_number': bp_number}
-                    command_exec_status = 'ok'
+                else:                        
+                    err, bp_number = self.set_breakpoint(c_file_name, 
+                                                         line_number, 
+                                                         condition=condition,
+                                                         enabled=enabled)
+                    if err:
+                        _logger.g_error("setBreakpoint error: %s", err)
+                        msg = "IKPdb error: Failed to set a breakpoint at %s:%s "\
+                              "(%s)." % (file_name, line_number, err,)
+                        error_messages = [msg]
+                        command_exec_status = 'error'
+                    else:
+                        result = {'breakpoint_number': bp_number}
+                        command_exec_status = 'ok'
                 remote_client.reply(obj, result, 
                                     command_exec_status=command_exec_status,
                                     error_messages=error_messages)
@@ -1630,7 +1669,7 @@ def signal_handler(signal, frame):
 def main():
 
     parser = argparse.ArgumentParser(description="IKPdb %s - Inouk Python Debugger for CPython 2.7" % __version__,
-                                     epilog="Copyright (c) 2016 by Cyril MORISSE, Audaxis")
+                                     epilog="Copyright (c) 2016, 2017 by Cyril MORISSE, Audaxis")
     parser.add_argument("-ik_a","--ikpdb-address", 
                         default='127.0.0.1',
                         dest="IKPDB_ADDRESS",
@@ -1656,6 +1695,11 @@ def main():
                         dest="IKPDB_WORKING_DIRECTORY",
                         default=None,
                         help="Allows to force debugger's Current Working Directory (CWD)")
+    parser.add_argument("-ik_ccwd", "--ikpdb-client-working-directory",
+                        dest="IKPDB_CLIENT_WORKING_DIRECTORY",
+                        default=None,
+                        help="Allows to force debugger's _client_ Current Working Directory. Useful "
+                             "for remote debugging.")
     parser.add_argument("script_command_args",
                         metavar="scriptfile [args]",
                         help="Debugged script followed by all his args.",
@@ -1676,8 +1720,10 @@ def main():
     if cmd_line_args.IKPDB_WORKING_DIRECTORY:
         _logger.g_debug("  Working Directory forced to: '%s'", 
                         cmd_line_args.IKPDB_WORKING_DIRECTORY)
-        
-    
+    if cmd_line_args.IKPDB_CLIENT_WORKING_DIRECTORY:
+        _logger.g_debug("  CLIENT Working Directory set to: '%s'", 
+                        cmd_line_args.IKPDB_CLIENT_WORKING_DIRECTORY)
+
     if not sys.argv[0:]:
         print "Error: scriptfile argument is required"
         sys.exit(2)
@@ -1724,7 +1770,8 @@ def main():
     
     global ikpdb
     ikpdb = IKPdb(stop_at_first_statement=cmd_line_args.IKPDB_STOP_AT_ENTRY,
-                  working_directory=cmd_line_args.IKPDB_WORKING_DIRECTORY)
+                  working_directory=cmd_line_args.IKPDB_WORKING_DIRECTORY,
+                  client_working_directory=cmd_line_args.IKPDB_CLIENT_WORKING_DIRECTORY)
 
     if cmd_line_args.IKPDB_SEND_WELCOME_MESSAGE:  
         remote_client.send("start", info_messages=["Welcome to", "IKPdb", __version__])
