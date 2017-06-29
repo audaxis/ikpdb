@@ -836,7 +836,7 @@ class IKPdb(object):
                 sys.stdout = eval_stdout
                 exec(expression, global_vars, local_vars)
                 sys.stdout = sys_stdout
-                result_value = eval_stdout.getvalue()
+                result_value = "<plaintext>%s" % eval_stdout.getvalue()                
                 result_type = "str"
                 result = result_value
             except Exception as e:
@@ -862,8 +862,24 @@ class IKPdb(object):
                         result_value, 
                         result_type, 
                         result)
-        if self.CGI_ESCAPE_EVALUATE_OUTPUT:
-            result_value = cgi.escape(result_value) 
+        if self.CGI_ESCAPE_EVALUATE_OUTPUT and not result_value.startswith('<plaintext>'):
+            result_value = cgi.escape(result_value)
+        
+        # We must check that result is json.dump compatible so that it can be sent back to client.
+        try:
+            json.dumps(result_value)
+        except:
+            t, result = sys.exc_info()[:2]
+            if isinstance(t, str):
+                result_type = t
+            else: 
+                result_type = t.__name__
+            result_value = "<plaintext>%s: IKPdb is unable to JSON encode result to send it to "\
+                           "debugging client.\n"\
+                           "  This typically occurs if you try to print a string that cannot be"\
+                           " decoded to 'UTF-8'.\n"\
+                           "  You should be able to evaluate result and inspect it's content"\
+                           " by removing the print statement." % result_type
         return result_value, result_type
 
     def let_variable(self, frame_id, var_name, expression_value):
