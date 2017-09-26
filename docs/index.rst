@@ -139,10 +139,9 @@ Say you want to debug code in a file name archive_server.py running on a remote 
 
 This file is stored in different folders:
 
-+------------------+-------------------------------------------------------+
-| Cloud9           | /home/ubuntu/workspace/archive-tools/archive_server.py |
-| Debugged Process | /opt/servers/archive-tools/archive_server.py          |
-+------------------+-------------------------------------------------------+
+* Cloud9: /home/ubuntu/workspace/archive-tools/archive_server.py
+* Debugged Process: /opt/servers/archive-tools/archive_server.py
+
 
 When Cloud9 asks IKPdb to add a breakpoint to a file, it sends a path relative to workspace's
 root: "archive-tool/archive_server.py".
