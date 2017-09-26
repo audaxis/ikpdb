@@ -123,19 +123,53 @@ Now you can start hacking on your own client. For that you can use this starting
 Source files mapping
 --------------------
 
-IKPdb exchanges file names with his debugger clients. When it sends a file name, IKPdb 
-always uses full path. But some debuggers client sends relative paths 
-(when setting breakpoints for example). In that case, IKPdb tries to resolve the
-file's full path using its *"working directory"* as a base folder. If it fails, 
-IKPdb sends a "FileMappingError:".
+ILPdb relies on Python's settrace() facility which requires file names with absolute paths.
 
-IKPdb's working directory can be defined:
+In some situations, the absolute path of a given file may be different between IKPdb's Client (Cloud9) 
+and IKPdb's debugged process.
 
-* Implicitly ; working directory is set to the debugged program's current directory.
-* Explictly ; using the **--ikpdb-working-directory** command line parameter
+That's where "path mapping" comes into play.
 
-To ask IKPdb to display its working directory add a **--ikpdb-log=G** command 
+Note that all we explain here is applies to Docker...
+
+Let's take an example.
+______________________
+
+Say you want to debug code in a file name archive_server.py running on a remote server.
+
+This file is stored in different folders:
+
++------------------+-------------------------------------------------------+
+| Cloud9           | /home/ubuntu/workspace/archive-tools/archive_server.py |
+| Debugged Process | /opt/servers/archive-tools/archive_server.py          |
++------------------+-------------------------------------------------------+
+
+When Cloud9 asks IKPdb to add a breakpoint to a file, it sends a path relative to workspace's
+root: "archive-tool/archive_server.py".
+To build an absolute path, IKPdb will use the value of the "--ikpdb-working-directory" parameter 
+or will default to IKPDb's current working directory.
+In our example --ikpdb-working-directory would be "/opt/servers/archive-tools/".
+This is done by IKPdb::normalize_path_in() method.
+
+When IKPdb reach a breakpoint, it will normalize the path by removing IKPdb's current working 
+directory then - if it's defined - it will prepend the value of "--ikpdb-client-working-directory" 
+so that the debugging client (Cloud9) will be able to display the breakpoint.
+In our example --ikpdb-client-working-directory will be "/archive-tools/".
+This is done by IKPdb::normalize_path_out() method.
+
+Summary
+_______
+
+--ikpdb-working-directory is used to compute file's path sent to IKPdb.
+--ikpdb-client-working-directory is used to compute file's path sent to IKPdb client.
+
+
+Debugging
+---------
+
+To ask IKPdb to display its working directory add a **--ikpdb-log=P** command 
 line parameter in the runner.
+
 
 User's Guide
 ------------
