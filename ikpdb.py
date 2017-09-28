@@ -29,7 +29,7 @@ import cgi
 
 # For now ikpdb is a singleton
 ikpdb = None 
-__version__ = "1.1"
+__version__ = "1.1.1"
 
 ##
 # Logging System
