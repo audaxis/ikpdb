@@ -584,7 +584,7 @@ class IKPdb(object):
         self.stop_at_first_statement = True if stop_at_first_statement else False
         
         # Some parameters that may need to become cli options
-        self.CGI_ESCAPE_EVALUATE_OUTPUT = True
+        self.CGI_ESCAPE_EVALUATE_OUTPUT = False
 
 
     def canonic(self, file_name):
@@ -859,15 +859,11 @@ class IKPdb(object):
             result_value = repr(result)
         except SyntaxError:
             try:
-                # From: http://stackoverflow.com/questions/3906232/python-get-the-print-output-in-an-exec-statement
-                sys_stdout = sys.stdout
-                eval_stdout = cStringIO.StringIO()
-                sys.stdout = eval_stdout
                 exec(expression, global_vars, local_vars)
-                sys.stdout = sys_stdout
-                result_value = "<plaintext>%s" % eval_stdout.getvalue()                
-                result_type = "str"
-                result = result_value
+                # In py3 exec() always returns None
+                result = None
+                result_type = IKPdbRepr(result)
+                result_value = repr(result)
             except Exception as e:
                 t, result = sys.exc_info()[:2]
                 if isinstance(t, str):
@@ -891,7 +887,7 @@ class IKPdb(object):
                         result_value, 
                         result_type, 
                         result)
-        if self.CGI_ESCAPE_EVALUATE_OUTPUT and not result_value.startswith('<plaintext>'):
+        if self.CGI_ESCAPE_EVALUATE_OUTPUT:
             result_value = cgi.escape(result_value)
         
         # We must check that result is json.dump compatible so that it can be sent back to client.
