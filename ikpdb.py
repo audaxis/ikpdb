@@ -814,9 +814,10 @@ class IKPdb(object):
                             hex(id(frame_browser.f_back)),
                             hex(id(self.frame_beginning)))
                                 
-            # Update local variables (User can use watch expressions for globals)
             locals_vars_list = self.extract_object_properties(frame_browser.f_locals,
                                                               limit_size=True)
+            globals_vars_list = self.extract_object_properties(frame_browser.f_globals,
+                                                               limit_size=True)
             # normalize path sent to debugging client
             file_path = self.normalize_path_out(frame_browser.f_code.co_filename)
 
@@ -827,7 +828,7 @@ class IKPdb(object):
                 'line_number': frame_browser.f_lineno,  # Warning 1 based
                 'file_path': file_path,
                 'thread': id(current_tread),
-                'f_locals': locals_vars_list
+                'f_locals': locals_vars_list + globals_vars_list
             }
             frames.append(remote_frame)
             frame_browser = frame_browser.f_back
