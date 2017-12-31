@@ -832,10 +832,16 @@ class IKPdb(object):
                             hex(id(frame_browser.f_back)),
                             hex(id(self.frame_beginning)))
                                 
-            locals_vars_list = self.extract_object_properties(frame_browser.f_locals,
-                                                              limit_size=True)
+            # At root frame, globals == locals so we dump only globals
+            if frame_browser.f_back.f_back != self.frame_beginning:
+                locals_vars_list = self.extract_object_properties(frame_browser.f_locals,
+                                                                  limit_size=True)
+            else:
+                locals_vars_list = []
+
             globals_vars_list = self.extract_object_properties(frame_browser.f_globals,
                                                                limit_size=True)
+                
             # normalize path sent to debugging client
             file_path = self.normalize_path_out(frame_browser.f_code.co_filename)
 
@@ -850,6 +856,7 @@ class IKPdb(object):
             }
             frames.append(remote_frame)
             frame_browser = frame_browser.f_back
+
         return frames        
 
     def evaluate(self, frame_id, expression, global_context=False, disable_break=False):
