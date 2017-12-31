@@ -707,7 +707,12 @@ class IKPdb(object):
         """Extracts all properties from an object (eg. f_locals, f_globals, 
         user dict, instance ...) and returns them as an array of variables.
         """
-        _logger.e_debug("extract_object_properties(%s)", repr(o)[:512])
+        try:
+            prop_str = repr(o)[:512]
+        except:
+            prop_str = "Error while extracting value"
+
+        _logger.e_debug("extract_object_properties(%s)", prop_str)
         var_list = []
         if isinstance(o, types.DictType):
             a_var_name = None
@@ -781,7 +786,11 @@ class IKPdb(object):
         returns name, truncated value and type (for str with size appended)
         """
         MAX_STRING_LEN_TO_RETURN = 487
-        t_value = repr(value)
+        try:
+            t_value = repr(value)
+        except:
+            t_value = "Error while extracting value"
+
         # convert all var names to string
         if isinstance(name, types.StringType):
             r_name = name
