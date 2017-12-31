@@ -1854,12 +1854,10 @@ def main():
         ikpdb.debugger_thread_ident = debugger_thread.ident
         run_script_event.wait()  # Wait for client to run script
         ikpdb._runscript(mainpyfile)
-        debugger_thread.join()
         remote_client.send('programEnd', 
                            result={'exit_code': None, 
                                    'executionStatus': 'terminated'})
-        _logger.g_info("Program terminated with no returned value.")  # TODO: send this to the debuger gui
-        sys.exit(0)
+        _logger.g_info("Program terminated with no exit value.")
 
     except SystemExit:
         # In most cases SystemExit does not warrant a post-mortem session.
@@ -1903,6 +1901,10 @@ def main():
         close_connection()
         debugger_thread.join()
         sys.exit(1)
+
+    finally:
+        sys.exit(0)
+
 
 
 # When invoked as main program, invoke the debugger on a script
