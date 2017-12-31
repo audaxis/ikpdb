@@ -18,7 +18,10 @@ import traceback
 import types
 import inspect
 import threading
-import Queue
+
+#import Queue
+from multiprocessing import Queue
+
 import types
 import argparse
 import datetime
@@ -563,7 +566,7 @@ class IKPdb(object):
         self.mainpyfile = ''
         self._active_breakpoint_lock = threading.Lock()
         self._active_thread_lock = threading.Lock()
-        self._command_q = Queue.Queue(maxsize=1)
+        self._command_q = Queue(maxsize=1)
 
         # tracing is disabled until required 
         self.execution_started = False
