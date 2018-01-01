@@ -2,6 +2,9 @@ A hackable CPython remote debugger designed for integration with the latest gene
 =============================================================================================================================================
 
 
+IKPdb is a Python 2 debugger. For **Python 3** see the IKP3db project on github and pypi. https://github.com/cmorisse/ikp3db
+
+
 Features
 --------
 

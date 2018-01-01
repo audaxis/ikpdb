@@ -32,7 +32,7 @@ import cgi
 
 # For now ikpdb is a singleton
 ikpdb = None 
-__version__ = "1.2"
+__version__ = "1.2.1"
 
 ##
 # Logging System
