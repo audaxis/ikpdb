@@ -313,7 +313,12 @@ class IKPdbConnectionHandler(object):
                             self.SOCKET_BUFFER_SIZE, 
                             self._received_data)
             try:
-                data = self._connection.recv(self.SOCKET_BUFFER_SIZE)
+                # We may land here with a full packet already in self.received_data
+                # In that case we must not enter recv() 
+                if self.SOCKET_BUFFER_SIZE:
+                    data = self._connection.recv(self.SOCKET_BUFFER_SIZE)
+                else:
+                    data = '' 
             except socket.error as socket_err:
                 return {'command': '_InternalQuit', 
                         'args':{'socket_error_number': socket_err.errno,
