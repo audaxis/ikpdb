@@ -1567,15 +1567,19 @@ class IKPdb(object):
 
             elif command == 'evaluate':
                 _logger.e_debug("evaluate(%s)", args)
-                # reply will be done in _tracer() L1100 when result is available
-                self._command_q.put({
-                    'cmd':'evaluate',
-                    'obj': obj,
-                    'frame': args['frame'],
-                    'expression': args['expression'],
-                    'global': args['global'],
-                    'disableBreak': args['disableBreak']
-                })
+                if self.tracing_enabled:
+                    self._command_q.put({
+                        'cmd':'evaluate',
+                        'obj': obj,
+                        'frame': args['frame'],
+                        'expression': args['expression'],
+                        'global': args['global'],
+                        'disableBreak': args['disableBreak']
+                    })
+                    # reply will be done in _tracer() L1100 when result is available
+                else:
+                    remote_client.reply(obj, {'value': None, 'type': None})
+                    
 
             elif command == "getProperties":
                 _logger.e_debug("getProperties(%s)", args)
