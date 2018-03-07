@@ -1743,7 +1743,7 @@ def signal_handler(signal, frame):
 def main():
 
     parser = argparse.ArgumentParser(description="IKPdb %s - Inouk Python Debugger for CPython 2.7" % __version__,
-                                     epilog="Copyright (c) 2016, 2017 by Cyril MORISSE, Audaxis")
+                                     epilog="Copyright (c) 2016, 2017, 2018 by Cyril MORISSE, Audaxis")
     parser.add_argument("-ik_a","--ikpdb-address", 
                         default='127.0.0.1',
                         dest="IKPDB_ADDRESS",
