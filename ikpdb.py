@@ -841,7 +841,8 @@ class IKPdb(object):
                             hex(id(self.frame_beginning)))
                                 
             # At root frame, globals == locals so we dump only globals
-            if frame_browser.f_back.f_back != self.frame_beginning:
+            if hasattr(frame_browser.f_back, 'f_back')\
+                    and frame_browser.f_back.f_back != self.frame_beginning:
                 locals_vars_list = self.extract_object_properties(frame_browser.f_locals,
                                                                   limit_size=True)
             else:
