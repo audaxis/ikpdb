@@ -9,7 +9,7 @@
 from setuptools import setup, find_packages, Extension
 
 name = 'ikpdb'
-version = '1.2.2'
+version = '1.2.3'
 
 
 long_description = (
