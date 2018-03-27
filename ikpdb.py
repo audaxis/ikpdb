@@ -18,6 +18,8 @@ import traceback
 import types
 import inspect
 import threading
+import urllib2
+
 
 #import Queue
 from multiprocessing import Queue
@@ -1739,7 +1741,18 @@ def signal_handler(signal, frame):
     close_connection()
     # Cf. http://tldp.org/LDP/abs/html/exitcodes.html
     sys.exit(128+signal)
-    
+
+
+def check_version():
+    URL = 'https://pypi.python.org/pypi/ikpdb/json'
+    try:
+        pypi_output = json.loads(urllib2.urlopen(URL, timeout=1).read())
+        last_version = pypi_output['info']['version']
+        if last_version != __version__:
+            _logger.g_warning("IKPdb %s is available on pypi.", last_version)
+    except:
+            _logger.g_error("Unable to check version. pypi.python.org responded too slowly.")
+        
 
 ##
 # main
@@ -1778,6 +1791,11 @@ def main():
                         default=None,
                         help="Allows to force debugger's _client_ Current Working Directory. Useful "
                              "for remote debugging.")
+    parser.add_argument("-ik_nvc", "--ikpdb-no-version-check",
+                        dest="IKPDB_NO_VERSION_CHECK",
+                        action='store_true',
+                        default=False,
+                        help="Disable version check on 'pypi.python.org'.")
     parser.add_argument("script_command_args",
                         metavar="scriptfile [args]",
                         help="Debugged script followed by all his args.",
@@ -1851,8 +1869,12 @@ def main():
                   working_directory=cmd_line_args.IKPDB_WORKING_DIRECTORY,
                   client_working_directory=cmd_line_args.IKPDB_CLIENT_WORKING_DIRECTORY)
 
+    if not cmd_line_args.IKPDB_NO_VERSION_CHECK:
+        check_version()
+
     if cmd_line_args.IKPDB_SEND_WELCOME_MESSAGE:  
         remote_client.send("start", info_messages=["Welcome to", "IKPdb", __version__])
+
 
     # Launch debugging
     try:
