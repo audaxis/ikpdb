@@ -34,7 +34,7 @@ import cgi
 
 # For now ikpdb is a singleton
 ikpdb = None 
-__version__ = "1.2.3"
+__version__ = "1.2.3+"
 
 ##
 # Logging System
@@ -364,8 +364,7 @@ class IKPdbConnectionHandler(object):
 #
 
 class IKPdbQuit(Exception):
-    """ A dummy Exception used by debugger to quit debugged program.
-    """
+    """ A dummy Exception used by debugger to quit debugged program. """
     pass
 
 def IKPdbRepr(t):
@@ -578,6 +577,13 @@ class IKPdb(object):
         # tracing is disabled until required 
         self.execution_started = False
         self.tracing_enabled = False
+        
+        # At any time IKPdb status can be
+        #   * 'pending' => Execution has not started yet
+        #   * 'running' 
+        #   * 'stopped' => either on a breakpoint or an exception
+        #   * 'terminated'
+        self.status = 'pending'  
 
         # stop management
         self.pending_stop = False  # True if any of frame_xxxx is set
@@ -1068,8 +1074,7 @@ class IKPdb(object):
         return False
 
     def should_break_here(self, frame):
-        """ Check if there is a breakpoint at this frame or not.
-        """
+        """ Check wether there is a breakpoint at this frame. """
         #_logger.b_debug("should_break_here(filename=%s, lineno=%s) with breaks=%s",
         #                frame.f_code.co_filename,
         #                frame.f_lineno,
@@ -1085,8 +1090,8 @@ class IKPdb(object):
 
     def _line_tracer(self, frame, exc_info=False):
         """This function is called when debugger has decided that we must
-        stop or break at this frame."""
-        
+        stop or break at this frame.
+        """
         # next logging statement commented for performance
         _logger.f_debug("user_line() with " 
                         "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
@@ -1100,6 +1105,7 @@ class IKPdb(object):
                       
         # Acquire Breakpoint Lock before sending break command to remote client
         self._active_breakpoint_lock.acquire()
+        self.status = 'stopped'
         frames = self.dump_frames(frame)
         exception=None
         warning_messages = []
@@ -1117,7 +1123,7 @@ class IKPdb(object):
 
         remote_client.send('programBreak', 
                            frames=frames,
-                           result={'executionStatus': 'stopped'},
+                           result={'executionStatus': 'stopped'},  # == self.status
                            warning_messages=warning_messages,
                            exception=exception)
                            
@@ -1192,6 +1198,7 @@ class IKPdb(object):
                 _logger.x_critical("Unknown command: %s received by _line_tracer()" % resume_command)
                 raise IKPdbQuit()
             
+        self.status = 'running'
         self._active_breakpoint_lock.release()
         return
 
@@ -1254,6 +1261,7 @@ class IKPdb(object):
         print "Dumping all threads Tracing state: (%s)" % context
         print "    self.tracing_enabled=%s" % self.tracing_enabled
         print "    self.execution_started=%s" % self.execution_started
+        print "    self.status=%s" % self.status
         print "    self.frame_beginning=%s" % self.frame_beginning
         print "    self.debugger_thread_ident=%s" % self.debugger_thread_ident
         for thr in threading.enumerate():
@@ -1286,6 +1294,7 @@ class IKPdb(object):
         """
         _logger.x_debug("enable_tracing()")
         #self.dump_tracing_state("before enable_tracing()")
+        
         if not self.tracing_enabled and self.execution_started:
             # Restore or set trace function on all existing frames appart from 
             # debugger
@@ -1410,6 +1419,7 @@ class IKPdb(object):
         # _tracer() and _line_tracer() methods for details).
         self.reset()
         self.execution_started = True
+        self.status = 'running'
 
         # Turn on limited tracing by setting trace function for 
         # current_thread only. This allow self.frame_beginning to be set at
@@ -1421,6 +1431,7 @@ class IKPdb(object):
         except IKPdbQuit:
             pass
         finally:
+            self.status = 'terminated'
             self.disable_tracing()        
         
     def command_loop(self, run_script_event):
@@ -1889,6 +1900,8 @@ def main():
         ikpdb.debugger_thread_ident = debugger_thread.ident
         run_script_event.wait()  # Wait for client to run script
         ikpdb._runscript(mainpyfile)
+        print "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz exit from _runScript()"
+        
         remote_client.send('programEnd', 
                            result={'exit_code': None, 
                                    'executionStatus': 'terminated'})
