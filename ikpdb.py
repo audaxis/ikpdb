@@ -1093,6 +1093,7 @@ class IKPdb(object):
         stop or break at this frame.
         """
         # next logging statement commented for performance
+        print "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",dir(frame)
         _logger.f_debug("user_line() with " 
                         "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
                         "self.should_break_here()=%s, self.should_stop_here()=%s\n",
@@ -1205,7 +1206,7 @@ class IKPdb(object):
     def _tracer(self, frame, event, arg):
         if event == 'line':
             
-            # For the sake of performande, we inline following code in
+            # For the sake of performance, we inlined following code in
             # this method. 
             # Code of these methods is still there for reference.
             #
@@ -1449,7 +1450,7 @@ class IKPdb(object):
                 
             elif command == "setBreakpoint":
                 # Set a new breakpoint. If the lineno line doesn't exist for the
-                # filename passed as argument, return an error message. €
+                # filename passed as argument, return an error message.
                 # The filename should be in canonical form, as described in the 
                 # canonic() method.
                 file_name = args['file_name']
@@ -1597,7 +1598,6 @@ class IKPdb(object):
                 else:
                     remote_client.reply(obj, {'value': None, 'type': None})
                     
-
             elif command == "getProperties":
                 _logger.e_debug("getProperties(%s)", args)
                 self._command_q.put({
@@ -1668,11 +1668,18 @@ def set_trace(a_frame=None):
     :rtype: str or None
 
     """
+    print "======================================================================================================"
+    
     if not ikpdb:
         return "Error: IKPdb must be launched before calling ikpd.set_trace()."
 
     if a_frame is None:
+        print "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx sys._getframe()", sys._getframe()
+        print "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx sys._getframe().f_back=", sys._getframe().f_back
         a_frame = sys._getframe().f_back
+    else:
+        print "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy a_frame", a_frame    
+        
     ikpdb._line_tracer(a_frame)
     return None
 
@@ -1771,7 +1778,7 @@ def check_version():
 def main():
 
     parser = argparse.ArgumentParser(description="IKPdb %s - Inouk Python Debugger for CPython 2.7" % __version__,
-                                     epilog="Copyright (c) 2016, 2017, 2018 by Cyril MORISSE, Audaxis")
+                                     epilog="Copyright (c) 2016-2018 by Cyril MORISSE, Audaxis")
     parser.add_argument("-ik_a","--ikpdb-address", 
                         default='127.0.0.1',
                         dest="IKPDB_ADDRESS",
@@ -1895,7 +1902,7 @@ def main():
         debugger_thread = threading.Thread(target=ikpdb.command_loop,
                                            name='IKPdbCommandLoop',
                                            args=(run_script_event,))
-        
+
         debugger_thread.start()
         ikpdb.debugger_thread_ident = debugger_thread.ident
         run_script_event.wait()  # Wait for client to run script
