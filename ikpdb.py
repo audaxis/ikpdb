@@ -321,11 +321,17 @@ class IKPdbConnectionHandler(object):
                     data = self._connection.recv(self.SOCKET_BUFFER_SIZE)
                 else:
                     data = '' 
+                _logger.n_debug("Socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
             except socket.error as socket_err:
                 return {'command': '_InternalQuit', 
                         'args':{'socket_error_number': socket_err.errno,
                                 'socket_error_str': socket_err.strerror}}
-            _logger.n_debug("Socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
+            except:
+                return {    
+                    'command': '_InternalQuit',
+                    'args':{}
+                }
+
             self._received_data += data
                 
             # have we received a MAGIC_CODE
@@ -1884,7 +1890,6 @@ def main():
         debugger_thread = threading.Thread(target=ikpdb.command_loop,
                                            name='IKPdbCommandLoop',
                                            args=(run_script_event,))
-        debugger_thread.setDaemon(True)
         debugger_thread.start()
         ikpdb.debugger_thread_ident = debugger_thread.ident
         run_script_event.wait()  # Wait for client to run script
