@@ -1884,7 +1884,7 @@ def main():
         debugger_thread = threading.Thread(target=ikpdb.command_loop,
                                            name='IKPdbCommandLoop',
                                            args=(run_script_event,))
-        
+        debugger_thread.setDaemon(True)
         debugger_thread.start()
         ikpdb.debugger_thread_ident = debugger_thread.ident
         run_script_event.wait()  # Wait for client to run script
