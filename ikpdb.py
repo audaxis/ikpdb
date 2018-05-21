@@ -1829,7 +1829,7 @@ def main():
     mainpyfile =  sys.argv[0]     # Get script filename
     _logger.g_debug("  mainpyfile = '%s'", mainpyfile)
     if not os.path.exists(mainpyfile):
-        print 'Error:', mainpyfile, 'does not exist'
+        print("Error: '%s' does not exist." % mainpyfile)
         sys.exit(1)
 
     # sets up signal handlers
