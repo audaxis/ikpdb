@@ -321,11 +321,17 @@ class IKPdbConnectionHandler(object):
                     data = self._connection.recv(self.SOCKET_BUFFER_SIZE)
                 else:
                     data = '' 
+                _logger.n_debug("Socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
             except socket.error as socket_err:
                 return {'command': '_InternalQuit', 
                         'args':{'socket_error_number': socket_err.errno,
                                 'socket_error_str': socket_err.strerror}}
-            _logger.n_debug("Socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
+            except:
+                return {    
+                    'command': '_InternalQuit',
+                    'args':{}
+                }
+
             self._received_data += data
                 
             # have we received a MAGIC_CODE
@@ -1847,7 +1853,7 @@ def main():
     mainpyfile =  sys.argv[0]     # Get script filename
     _logger.g_debug("  mainpyfile = '%s'", mainpyfile)
     if not os.path.exists(mainpyfile):
-        print 'Error:', mainpyfile, 'does not exist'
+        print("Error: '%s' does not exist." % mainpyfile)
         sys.exit(1)
 
     # sets up signal handlers
