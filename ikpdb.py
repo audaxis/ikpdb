@@ -1449,7 +1449,7 @@ class IKPdb(object):
                 # canonic() method.
                 file_name = args['file_name']
                 line_number = args['line_number']
-                condition = args.get('condition', '')
+                condition = args.get('condition', None)
                 enabled = args.get('enabled', True)
                 _logger.b_debug("setBreakpoint(file_name=%s, line_number=%s,"
                                 " condition=%s, enabled=%s) with CWD=%s",
