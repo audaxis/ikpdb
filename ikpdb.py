@@ -1099,7 +1099,6 @@ class IKPdb(object):
         stop or break at this frame.
         """
         # next logging statement commented for performance
-        print "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",dir(frame)
         _logger.f_debug("user_line() with " 
                         "threadName=%s, frame=%s, frame.f_code=%s, self.mainpyfile=%s,"
                         "self.should_break_here()=%s, self.should_stop_here()=%s\n",
@@ -1674,18 +1673,11 @@ def set_trace(a_frame=None):
     :rtype: str or None
 
     """
-    print "======================================================================================================"
-    
     if not ikpdb:
         return "Error: IKPdb must be launched before calling ikpd.set_trace()."
 
     if a_frame is None:
-        print "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx sys._getframe()", sys._getframe()
-        print "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx sys._getframe().f_back=", sys._getframe().f_back
         a_frame = sys._getframe().f_back
-    else:
-        print "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy a_frame", a_frame    
-        
     ikpdb._line_tracer(a_frame)
     return None
 
