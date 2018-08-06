@@ -332,15 +332,16 @@ class IKPdbConnectionHandler(object):
                     'args':{}
                 }
 
-            self._received_data += data
-                
+            # received data is utf8 encoded
+            self._received_data += data.decode('utf8')
+
             # have we received a MAGIC_CODE
             try:
                 magic_code_idx = self._received_data.index(self.MAGIC_CODE)
             except ValueError:
                 continue
             
-            # Have we received a length=
+            # Have we received a 'length='
             try:
                 length_idx = self._received_data.index('length=')
             except ValueError:
