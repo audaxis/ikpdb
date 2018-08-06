@@ -1906,8 +1906,6 @@ def main():
         ikpdb.debugger_thread_ident = debugger_thread.ident
         run_script_event.wait()  # Wait for client to run script
         ikpdb._runscript(mainpyfile)
-        print "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz exit from _runScript()"
-        
         remote_client.send('programEnd', 
                            result={'exit_code': None, 
                                    'executionStatus': 'terminated'})
