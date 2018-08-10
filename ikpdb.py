@@ -401,11 +401,11 @@ def IKPdbRepr(t):
     :return: a string representation of t's type
     Note: Type representation str format is not finalized...
     """
-    #if hasattr(t, '__class__'):
-    #    return t.__class__.__name__
-    #t_type = type(t)
-    #return str(t_type).split(' ')[1][1:-2]
-    return str(type(t))
+    try:
+        result = str(type(t)).split('\'')[1]
+    except:
+        result = "IKPdbReprError"
+    return result
 
 class IKBreakpoint(object):
     """ IKBreakpoint implements and manages IKPdb Breakpoints. 
@@ -1141,7 +1141,7 @@ class IKPdb(object):
         if exc_info:
             exception = {
                 'type': IKPdbRepr(exc_info[1]),
-                'info': str(exc_info[1].message)
+                'info': exc_info[1].message
             }
 
         if self.stop_at_first_statement:
@@ -1488,7 +1488,7 @@ class IKPdb(object):
                 # canonic() method.
                 file_name = args['file_name']
                 line_number = args['line_number']
-                condition = args.get('condition', None)
+                condition = args.get('condition', '')
                 enabled = args.get('enabled', True)
                 _logger.b_debug("setBreakpoint(file_name=%s, line_number=%s,"
                                 " condition=%s, enabled=%s) with CWD=%s",
@@ -1583,10 +1583,10 @@ class IKPdb(object):
                                     error_messages=error_messages)
             
             elif command == 'runScript':
-                _logger.x_debug("runScript(%s)", args)
                 #TODO: handle a 'stopAtEntry' arg
-                run_script_event.set()
+                _logger.x_debug("runScript(%s)", args)
                 remote_client.reply(obj, {'executionStatus': 'running'})
+                run_script_event.set()
 
             elif command == 'suspend':
                 _logger.x_debug("suspend(%s)", args)
@@ -1988,13 +1988,12 @@ def main():
         pm_traceback = sys.exc_info()[2]
         while pm_traceback.tb_next:
             pm_traceback = pm_traceback.tb_next      
-        
         ikpdb._line_tracer(pm_traceback.tb_frame, exc_info=sys.exc_info())
-        
         try:
             remote_client.send('programEnd', 
                                result={'exit_code': None, 
                                        'executionStatus': 'terminated'})
+            ikpdb.status = 'terminated'
         except:
             pass
         
