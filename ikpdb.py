@@ -205,12 +205,14 @@ class IKPdbConnectionHandler(object):
     
     SOCKET_BUFFER_SIZE = 4096  # Maximum size of a packet received from client
     MSG_WAITALL = 0x100  # From Linux sys/socket.h
+    CMD_LOOP_SOCKET_TIMEOUT = 0.3
     
     def __init__(self, connection):
         self._connection = connection
         self._connection_lock = threading.Lock()
         self._received_data = ''
         self._network_loop = True
+        self._connection.settimeout(self.CMD_LOOP_SOCKET_TIMEOUT)
 
     def encode(self, obj):
         json_obj = json.dumps(obj)
@@ -306,7 +308,7 @@ class IKPdbConnectionHandler(object):
             self.log_sent(msg)
             return send_bytes_count
 
-    def receive(self):
+    def receive(self, ikpdb):
         """Waits for a message from the debugger and returns it as a dict.
         """
         # with self._connection_lock:
@@ -321,15 +323,34 @@ class IKPdbConnectionHandler(object):
                     data = self._connection.recv(self.SOCKET_BUFFER_SIZE)
                 else:
                     data = '' 
-                _logger.n_debug("Socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
+                _logger.n_debug("socket.recv(%s) => %s", self.SOCKET_BUFFER_SIZE, data)
+            except socket.timeout:
+                _logger.n_debug("socket.timeout witk ikpdb.status=%s", ikpdb.status)
+                if ikpdb.status == 'terminated':
+                    _logger.n_debug("breaking IKPdbConnectionHandler.receive() "
+                                    "network loop as ikpdb state is 'terminated'.")
+                    return {    
+                        'command': '_InternalQuit',
+                        'args':{}
+                    }
+                continue
             except socket.error as socket_err:
-                return {'command': '_InternalQuit', 
-                        'args':{'socket_error_number': socket_err.errno,
-                                'socket_error_str': socket_err.strerror}}
-            except:
+                if ikpdb.status == 'terminated':
+                    return {'command': '_InternalQuit', 
+                            'args':{'socket_error_number': socket_err.errno,
+                                    'socket_error_str': socket_err.strerror}}
+                    
+            except Exception as exc:
+                _logger.g_error("Unexecpected Error: '%s' in IKPdbConnectionHandler"
+                                ".command_loop.", exc)
+                _logger.g_error(traceback.format_exc())
+                print "".join(traceback.format_stack())
                 return {    
                     'command': '_InternalQuit',
-                    'args':{}
+                    'args':{
+                        "error": exc.__class__.__name__,
+                        "message": exc.message
+                    }
                 }
 
             # received data is utf8 encoded
@@ -1200,6 +1221,11 @@ class IKPdb(object):
                                     result,
                                     command_exec_status=command_exec_status,
                                     error_messages=error_messages)
+
+            elif command['cmd'] == '_InternalQuit':
+                _logger.x_critical("Exiting tracer upon reception of _Internal"
+                                   "Quit  command")
+                raise IKPdbQuit()
             
             else:
                 _logger.x_critical("Unknown command: %s received by _line_tracer()" % resume_command)
@@ -1445,8 +1471,9 @@ class IKPdb(object):
         """ return 1 to exit command_loop and resume execution 
         """
         while True:
-            obj = remote_client.receive()
-            command = obj["command"]  # TODO: ensure we always have a command if receive returns
+            obj = remote_client.receive(self)
+            # TODO: ensure we always have a command if receive returns
+            command = obj["command"]  
             args = obj.get('args', {})
         
             if command == 'getBreakpoints':
@@ -1644,6 +1671,7 @@ class IKPdb(object):
                 # in order to allow debugged program to shutdown correctly.
                 # This message must NEVER be send by remote client.
                 _logger.e_debug("_InternalQuit(%s)", args)
+                self._command_q.put({'cmd':'_InternalQuit'})
                 return
             
             else: # unrecognized command ; just log and ignored
@@ -1779,16 +1807,19 @@ def check_version():
         if last_version != __version__:
             _logger.g_warning("IKPdb %s is available on pypi.", last_version)
     except:
-            _logger.g_error("Unable to check version. pypi.python.org responded too slowly.")
-        
+            _logger.g_error("Unable to check version. pypi.python.org responded"
+                            "too slowly.")
+
 
 ##
 # main
 #
 def main():
 
-    parser = argparse.ArgumentParser(description="IKPdb %s - Inouk Python Debugger for CPython 2.7" % __version__,
-                                     epilog="Copyright (c) 2016-2018 by Cyril MORISSE, Audaxis")
+    parser = argparse.ArgumentParser(description="IKPdb %s - Inouk Python Debug"
+                                                 "ger for CPython 2.7" % __version__,
+                                     epilog="Copyright (c) 2016-2018 by Cyril"
+                                            " MORISSE, Audaxis")
     parser.add_argument("-ik_a","--ikpdb-address", 
                         default='127.0.0.1',
                         dest="IKPDB_ADDRESS",
@@ -1813,11 +1844,13 @@ def main():
     parser.add_argument("-ik_cwd", "--ikpdb-working-directory",
                         dest="IKPDB_WORKING_DIRECTORY",
                         default=None,
-                        help="Allows to force debugger's Current Working Directory (CWD)")
+                        help="Allows to force debugger's Current Working "
+                             "Directory (CWD)")
     parser.add_argument("-ik_ccwd", "--ikpdb-client-working-directory",
                         dest="IKPDB_CLIENT_WORKING_DIRECTORY",
                         default=None,
-                        help="Allows to force debugger's _client_ Current Working Directory. Useful "
+                        help="Allows to force debugger's _client_ Current Worki"
+                             "ng Directory. Useful "
                              "for remote debugging.")
     parser.add_argument("-ik_nvc", "--ikpdb-no-version-check",
                         dest="IKPDB_NO_VERSION_CHECK",
@@ -1836,7 +1869,8 @@ def main():
     # debugged script with all IKPdb args removed
     sys.argv = cmd_line_args.script_command_args
 
-    _logger.g_info("IKPdb %s - Inouk Python Debugger for CPython 2.7", __version__)
+    _logger.g_info("IKPdb %s - Inouk Python Debugger for CPython 2.7", 
+                   __version__)
     _logger.g_debug("  interpreter: '%s'", sys.executable)
     _logger.g_debug("  args: %s", cmd_line_args)
     _logger.g_debug("  starts debugging: '%s'", " ".join(sys.argv))
@@ -1876,10 +1910,13 @@ def main():
     
     # Initialize IKPdb listen socket
     debug_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    debug_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # http://stackoverflow.com/questions/4465959/python-errno-98-address-already-in-use?lq=1
+    
+    # http://stackoverflow.com/questions/4465959/python-errno-98-address-already-in-use?lq=1
+    debug_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  
     debug_socket.bind((cmd_line_args.IKPDB_ADDRESS, cmd_line_args.IKPDB_PORT,))
 
-    _logger.g_info('IKPdb listening on %s:%s', cmd_line_args.IKPDB_ADDRESS, cmd_line_args.IKPDB_PORT)
+    _logger.g_info("IKPdb listening on %s:%s", cmd_line_args.IKPDB_ADDRESS, 
+                   cmd_line_args.IKPDB_PORT)
     debug_socket.listen(1)  # 1 connection max
     
     # Wait for a connection
@@ -1901,7 +1938,8 @@ def main():
         check_version()
 
     if cmd_line_args.IKPDB_SEND_WELCOME_MESSAGE:  
-        remote_client.send("start", info_messages=["Welcome to", "IKPdb", __version__])
+        remote_client.send("start", 
+                           info_messages=["Welcome to", "IKPdb", __version__])
 
 
     # Launch debugging
