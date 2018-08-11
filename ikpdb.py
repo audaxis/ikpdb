@@ -1857,6 +1857,11 @@ def main():
                         action='store_true',
                         default=False,
                         help="Disable version check on 'pypi.python.org'.")
+    parser.add_argument("-ik_v", "--ikpdb-version",
+                        dest="IKPDB_VERSION",
+                        action='store_true',
+                        default=False,
+                        help="Returns IKPdb version and exit.")
     parser.add_argument("script_command_args",
                         metavar="scriptfile [args]",
                         help="Debugged script followed by all his args.",
@@ -1868,6 +1873,9 @@ def main():
     # We modify sys.argv to reflect command line of
     # debugged script with all IKPdb args removed
     sys.argv = cmd_line_args.script_command_args
+    if cmd_line_args.IKPDB_VERSION:
+        print(__version__)
+        sys.exit(0)
 
     _logger.g_info("IKPdb %s - Inouk Python Debugger for CPython 2.7", 
                    __version__)
