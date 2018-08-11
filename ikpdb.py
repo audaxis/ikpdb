@@ -1800,15 +1800,15 @@ def signal_handler(signal, frame):
 
 
 def check_version():
-    URL = 'https://pypi.python.org/pypi/ikpdb/json'
+    URL = 'https://pypi.org/pypi/ikpdb/json'
     try:
         pypi_output = json.loads(urllib2.urlopen(URL, timeout=1).read())
         last_version = pypi_output['info']['version']
-        if last_version != __version__:
+        if last_version > __version__:
             _logger.g_warning("IKPdb %s is available on pypi.", last_version)
     except:
-            _logger.g_error("Unable to check version. pypi.python.org responded"
-                            "too slowly.")
+            _logger.g_info("Unable to check available version. pypi.python.org "
+                           "responded too slowly.")
 
 
 ##
