@@ -4,7 +4,7 @@
 
 /**
  * This file is part of the IKPdb Debugger
- * Copyright (c) 2016 by cyril MORISSE, Audaxis
+ * Copyright (c) 2016-2018 by cyril MORISSE, Audaxis
  * Licence: MIT. See LICENCE at repository root
  */
 
