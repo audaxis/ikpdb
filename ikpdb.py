@@ -20,9 +20,7 @@ import inspect
 import threading
 import urllib2
 
-
-#import Queue
-from multiprocessing import Queue
+import Queue
 
 import types
 import argparse
@@ -339,6 +337,7 @@ class IKPdbConnectionHandler(object):
                     return {'command': '_InternalQuit', 
                             'args':{'socket_error_number': socket_err.errno,
                                     'socket_error_str': socket_err.strerror}}
+                continue
                     
             except Exception as exc:
                 _logger.g_error("Unexecpected Error: '%s' in IKPdbConnectionHandler"
@@ -600,7 +599,7 @@ class IKPdb(object):
         self.mainpyfile = ''
         self._active_breakpoint_lock = threading.Lock()
         self._active_thread_lock = threading.Lock()
-        self._command_q = Queue(maxsize=1)
+        self._command_q = Queue.Queue(maxsize=1)
 
         # tracing is disabled until required 
         self.execution_started = False
