@@ -32,7 +32,7 @@ import cgi
 
 # For now ikpdb is a singleton
 ikpdb = None 
-__version__ = "1.2.4"
+__version__ = "1.2.4+"
 
 ##
 # Logging System
@@ -227,7 +227,7 @@ class IKPdbConnectionHandler(object):
     def log_received(self, msg):
         _logger.n_debug("Received %s bytes >>>%s<<<", len(msg), msg)
     
-    def send(self, command, _id=None, result={}, frames=[], 
+    def send(self, command, _id=None, result={}, frames=[], threads=None,
              error_messages=[], warning_messages=[], info_messages=[],
              exception=None):
         """ Build a message from parameters and send it to debugger.
@@ -264,7 +264,7 @@ class IKPdbConnectionHandler(object):
         :type exception: dict
         """
         with self._connection_lock:
-            msg = self.encode({
+            payload = {
                 '_id': _id,
                 'command': command,
                 'result': result,
@@ -274,7 +274,10 @@ class IKPdbConnectionHandler(object):
                 'warning_messages': warning_messages,
                 'error_messages': error_messages,
                 'exception': exception
-            })
+            }
+            if threads:
+                payload['threads'] = threads
+            msg = self.encode(payload)
             if self._connection:
                 send_bytes_count = self._connection.sendall(msg)
                 self.log_sent(msg)
@@ -611,6 +614,8 @@ class IKPdb(object):
         #   * 'stopped' => either on a breakpoint or an exception
         #   * 'terminated'
         self.status = 'pending'  
+        self.debugged_thread_ident = None
+        self.debugged_thread_name = None
 
         # stop management
         self.pending_stop = False  # True if any of frame_xxxx is set
@@ -861,7 +866,7 @@ class IKPdb(object):
         """ dumps frames chain in a representation suitable for serialization 
            and remote (debugger) client usage.
         """
-        current_tread = threading.currentThread()
+        current_thread = threading.currentThread()
         frames = []
         frame_browser = frame
         
@@ -892,14 +897,15 @@ class IKPdb(object):
             # normalize path sent to debugging client
             file_path = self.normalize_path_out(frame_browser.f_code.co_filename)
 
-            frame_name = "%s() [%s]" % (frame_browser.f_code.co_name, current_tread.name,)
+            frame_name = "%s() [%s]" % (frame_browser.f_code.co_name, current_thread.name,)
             remote_frame = {
                 'id': id(frame_browser),
                 'name': frame_name,
                 'line_number': frame_browser.f_lineno,  # Warning 1 based
                 'file_path': file_path,
-                'thread': id(current_tread),
-                'f_locals': locals_vars_list + globals_vars_list
+                'f_locals': locals_vars_list + globals_vars_list,
+                'thread': current_thread.ident,
+                'thread_name': current_thread.name
             }
             frames.append(remote_frame)
             frame_browser = frame_browser.f_back
@@ -1115,6 +1121,53 @@ class IKPdb(object):
                                                       frame)
         return True if bp else False
 
+    def get_threads(self):
+        """Returns a dict of all threads and indicates thread being debugged.
+        key is thread ident and values thread info.
+        Information from this list can be used to swap thread being debugged.
+        """
+        thread_list = {}
+        for thread in threading.enumerate():
+            thread_ident = thread.ident
+            thread_list[thread_ident] = {
+                "ident": thread_ident,
+                "name": thread.name,
+                "is_debugger": thread_ident == self.debugger_thread_ident,
+                "debugged": thread_ident == self.debugged_thread_ident
+            }
+        return thread_list
+            
+    
+    def set_debugged_thread(self, target_thread_ident=None):
+        """ Allows to reset or set the thread to debug. """
+        if target_thread_ident is None:
+            self.debugged_thread_ident = None
+            self.debugged_thread_name = ''
+            return {
+                "result": self.get_threads(),
+                "error": ""
+            }
+            
+        thread_list = self.get_threads()
+        if target_thread_ident not in thread_list:
+            return {
+                "result": None,
+                "error": "No thread with ident:%s." % target_thread_ident
+            }
+        
+        if thread_list[target_thread_ident]['is_debugger']:
+            return {
+                "result": None,
+                "error": "Cannot debug IKPdb tracer (sadly...)."
+            }
+        
+        self.debugged_thread_ident = target_thread_ident
+        self.debugged_thread_name = thread_list[target_thread_ident]['name']
+        return {
+            "result": self.get_threads(),
+            "error": ""
+        }
+
     def _line_tracer(self, frame, exc_info=False):
         """This function is called when debugger has decided that it must
         stop or break at this frame.
@@ -1129,7 +1182,15 @@ class IKPdb(object):
                          self.mainpyfile,
                          self.should_break_here(frame),
                          self.should_stop_here(frame))
-                      
+
+        # next lines allow to focus debugging on only one thread
+        if self.debugged_thread_ident is None:
+            self.debugged_thread_ident = threading.currentThread().ident
+            self.debugged_thread_name = threading.currentThread().name
+        else:
+            if threading.currentThread().ident != self.debugged_thread_ident:
+                return
+
         # Acquire Breakpoint Lock before sending break command to remote client
         self._active_breakpoint_lock.acquire()
         self.status = 'stopped'
@@ -1150,6 +1211,7 @@ class IKPdb(object):
 
         remote_client.send('programBreak', 
                            frames=frames,
+                           threads= self.get_threads(),
                            result={'executionStatus': 'stopped'},  # == self.status
                            warning_messages=warning_messages,
                            exception=exception)
@@ -1660,6 +1722,22 @@ class IKPdb(object):
                 _logger.n_debug("reconnect(%s)", args)
                 remote_client.reply(obj, {'executionStatus': self.status})
                 
+            elif command == 'getThreads':
+                _logger.x_debug("getThreads(%s)", args)
+                threads_list = self.get_threads()
+                remote_client.reply(obj, threads_list)
+        
+            elif command == 'setDebuggedThread':
+                _logger.x_debug("setDebuggedThread(%s)", args)
+                ret_val = self.set_debugged_thread(args['ident'])
+                if ret_val['error']:
+                    remote_client.reply(obj, 
+                                        {},  # result
+                                        command_exec_status='error',
+                                        error_messages=[ret_val['error']])
+
+                else:
+                    remote_client.reply(obj, ret_val['result'])
 
             elif command == '_InternalQuit':
                 # '_InternalQuit' is an IKPdb internal message, generated by 
